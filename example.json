@@ -1,0 +1,137 @@
+{
+  "basics": {
+    "name": "Daniel Taylor",
+    "label": "Staff Software Engineer",
+    "email": "danielgtaylor@gmail.com",
+    "location": {
+      "city": "Seattle",
+      "countryCode": "US",
+      "region": "Washington"
+    },
+    "profiles": [
+      {
+        "network": "Github",
+        "url": "https://github.com/danielgtaylor"
+      },
+      {
+        "network": "Dev Blog",
+        "url": "https://dev.to/danielgtaylor"
+      },
+      {
+        "network": "LinkedIn",
+        "url": "https://www.linkedin.com/in/danielgtaylor"
+      }
+    ],
+    "updated": "2022-04-21T00:00:00Z",
+    "verified": true
+  },
+  "skills": [
+    {
+      "name": "Specialization",
+      "keywords": [
+        "Open source & community engagement",
+        "API design & tooling",
+        "Live media streaming",
+        "Distributed backend systems",
+        "React-based frontends"
+      ]
+    },
+    {
+      "name": "API Technologies",
+      "keywords": ["OAuth2", "OpenAPI", "GraphQL", "gRPC", "Protobuf"]
+    },
+    {
+      "name": "Languages",
+      "keywords": ["Go", "Typescript", "Javascript", "Python", "C"]
+    },
+    {
+      "name": "Databases",
+      "keywords": ["MongoDB", "MySQL", "Postgres"]
+    },
+    {
+      "name": "Infra",
+      "keywords": ["Docker", "Kubernetes", "AWS", "Terraform"]
+    }
+  ],
+  "languages": [
+    {
+      "language": "English",
+      "fluency": "Native"
+    },
+    {
+      "language": "German",
+      "fluency": "Reads: native; writes: getting rusty"
+    }
+  ],
+  "volunteer": [
+    {
+      "name": "Restish",
+      "summary": "A CLI for interacting with REST-ish HTTP APIs with OpenAPI 3 support built-in.",
+      "url": "https://rest.sh/",
+      "position": "Owner / Maintainer",
+      "startDate": "2018-09-29T00:00:00Z"
+    },
+    {
+      "name": "Huma",
+      "summary": "Golang HTTP/GraphQL API framework with OpenAPI 3",
+      "url": "https://huma.rocks/",
+      "position": "Owner / Maintainer",
+      "startDate": "2020-03-07T00:00:00Z"
+    },
+    {
+      "name": "BetterProto",
+      "summary": "Clean, modern, Python code generator & library for Protobuf 3 and async gRPC",
+      "url": "https://github.com/danielgtaylor/python-betterproto",
+      "position": "Owner / Maintainer",
+      "startDate": "2019-08-05T00:00:00Z"
+    }
+  ],
+  "work": [
+    {
+      "name": "Warner Bros. Discovery / WarnerMedia",
+      "position": "Staff Software Engineer",
+      "startDate": "2016-09-01T00:00:00Z",
+      "highlights": [
+        "Tech lead on multiple teams",
+        "Mentored multiple engineers & started a brand new team",
+        "Ramped up teams on Go & Typescript+React",
+        "Created an open source Go web framework with OpenAPI & GraphQL",
+        "Designed & built new control-plane configuration APIs",
+        "Designed & built a custom protobuf compiler to code-generate API data structures",
+        "Created an interactive developer documentation portal",
+        "Designed & built a scheduled events API for calendar ingestion and automated live channel configuration/startup",
+        "Designed & built a live low-latency video preview system for March Madness",
+        "Replaced a thick client with multi-view web app for live event operations",
+        "Designed & built a pluggable playback monitor analysis pipeline",
+        "Helped build a zipcode-based dynamic playlist generation service for regional live sports & targeted advertising"
+      ]
+    },
+    {
+      "name": "Apiary",
+      "position": "Senior Software Engineer",
+      "startDate": "2015-04-01T00:00:00Z",
+      "endDate": "2016-07-30T00:00:00Z",
+      "highlights": [
+        "Built the Aglio documentation tool with 4.7K Github stars",
+        "Worked on API Blueprint specification / proposals",
+        "Created a React-based documentation renderer for Apiary.io",
+        "Maintainer of open-source API Blueprint tools & libraries"
+      ]
+    },
+    {
+      "name": "Amazon",
+      "position": "Software Development Engineer II",
+      "startDate": "2012-04-01T00:00:00Z",
+      "endDate": "2015-04-01T00:00:00Z",
+      "summary": "Prime Video, then Amazon Web Services",
+      "highlights": [
+        "Built captions support for Prime Video web player",
+        "Launched PlayReady DRM support for Prime Video",
+        "Designed, built, and launched Boto3 (Python SDK for AWS)",
+        "Added Python3 support to Boto2 community project",
+        "AWS CLI maintainer & developer advocate",
+        "Gave a talk to 250+ people at AWS Re:Invent"
+      ]
+    }
+  ]
+}
