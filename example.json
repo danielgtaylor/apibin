@@ -65,21 +65,21 @@
   ],
   "volunteer": [
     {
-      "name": "Restish",
+      "organization": "Restish",
       "summary": "A CLI for interacting with REST-ish HTTP APIs with OpenAPI 3 support built-in.",
       "url": "https://rest.sh/",
       "position": "Owner / Maintainer",
       "startDate": "2018-09-29T00:00:00Z"
     },
     {
-      "name": "Huma",
+      "organization": "Huma",
       "summary": "Golang HTTP/GraphQL API framework with OpenAPI 3",
       "url": "https://huma.rocks/",
       "position": "Owner / Maintainer",
       "startDate": "2020-03-07T00:00:00Z"
     },
     {
-      "name": "BetterProto",
+      "organization": "BetterProto",
       "summary": "Clean, modern, Python code generator & library for Protobuf 3 and async gRPC",
       "url": "https://github.com/danielgtaylor/python-betterproto",
       "position": "Owner / Maintainer",
