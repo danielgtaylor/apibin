@@ -80,7 +80,7 @@ func main() {
 	echo.Tags("Echo")
 	echoResp := huma.
 		NewResponse(0, "Default response").
-		Headers("Content-Type", "Cache-Control", "Link", "Last-Modified", "Etag").
+		Headers("Content-Type", "Cache-Control", "Link", "Last-Modified", "Etag", "Vary").
 		Model(EchoModel{})
 	echo.Get("get-echo", "Echo GET", echoResp).Run(echoHandler)
 	echo.Post("post-echo", "Echo POST", echoResp).Run(echoHandler)

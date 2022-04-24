@@ -116,7 +116,8 @@ func echoHandler(ctx huma.Context, input struct {
 		return
 	}
 
-	ctx.Header().Set("Cache-Control", "no-cache")
+	ctx.Header().Set("Cache-Control", "no-store")
+	ctx.Header().Set("Vary", "*")
 	ctx.Header().Set("Last-Modified", lastModified.Format(http.TimeFormat))
 	ctx.Header().Set("ETag", `"`+etag+`"`)
 
