@@ -43,7 +43,7 @@ type ImageItem struct {
 
 type SubObject struct {
 	Binary     []byte    `json:"binary"`
-	BinaryLong []byte    `json:"binaryLong"`
+	BinaryLong []byte    `json:"binary_long"`
 	Date       time.Time `json:"date"`
 	DateTime   time.Time `json:"date_time"`
 	URL        string    `json:"url" format:"uri"`
