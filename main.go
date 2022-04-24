@@ -109,6 +109,7 @@ func main() {
 			},
 		})
 	})
+	types.Put("put-types-example", "Example write for edits", echoResp).Run(echoHandler)
 
 	example := app.Resource("/example")
 	example.Tags("Example")
