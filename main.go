@@ -136,9 +136,14 @@ func main() {
 	cached.Get("get-cached", "Cached response example",
 		responses.OK().Headers("Cache-Control").Model(CachedModel{}),
 	).Run(func(ctx huma.Context, input struct {
-		Seconds int `path:"seconds" minimum:"1" maximum:"300" doc:"Number of seconds to cache"`
+		Seconds int  `path:"seconds" minimum:"1" maximum:"300" doc:"Number of seconds to cache"`
+		Private bool `query:"private" doc:"Disabled shared caches like CDNs"`
 	}) {
-		ctx.Header().Set("Cache-Control", fmt.Sprintf("max-age=%d", input.Seconds))
+		header := fmt.Sprintf("max-age=%d", input.Seconds)
+		if input.Private {
+			header = "private, " + header
+		}
+		ctx.Header().Set("Cache-Control", header)
 		ctx.WriteModel(http.StatusOK, CachedModel{
 			Generated: time.Now(),
 			Until:     time.Now().Add(time.Duration(input.Seconds) * time.Second),
