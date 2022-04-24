@@ -184,7 +184,7 @@ func main() {
 				{
 					Name:   "Station in Prague",
 					Format: "png",
-					Self:   "/images/webp",
+					Self:   "/images/png",
 				},
 			})
 		} else if input.Cursor == "def456" {
