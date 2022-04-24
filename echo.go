@@ -29,12 +29,14 @@ func (r *RequestInfo) Resolve(ctx huma.Context, req *http.Request) {
 }
 
 type EchoModel struct {
-	Method  string            `json:"method"`
-	Headers map[string]string `json:"headers"`
-	Host    string            `json:"host,omitempty"`
-	URL     string            `json:"url"`
-	Body    string            `json:"body"`
-	Parsed  interface{}       `json:"parsed,omitempty"`
+	Method  string            `json:"method" doc:"HTTP method used"`
+	Headers map[string]string `json:"headers" doc:"HTTP headers"`
+	Host    string            `json:"host,omitempty" doc:"Hostname and optional port"`
+	URL     string            `json:"url" doc:"Full URL"`
+	Path    string            `json:"path" doc:"URL path"`
+	Query   map[string]string `json:"query,omitempty" doc:"URL query parameters"`
+	Body    string            `json:"body,omitempty" doc:"Raw request body"`
+	Parsed  interface{}       `json:"parsed,omitempty" doc:"Parsed request body"`
 }
 
 func tryParse(contentType string, body []byte) interface{} {
@@ -75,6 +77,11 @@ func echoHandler(ctx huma.Context, input struct {
 		headers[k] = strings.Join(v, ", ")
 	}
 
+	query := map[string]string{}
+	for k := range input.request.URL.Query() {
+		query[k] = input.request.URL.Query().Get(k)
+	}
+
 	body := ""
 	var parsed interface{}
 	if input.request.Body != nil {
@@ -86,11 +93,18 @@ func echoHandler(ctx huma.Context, input struct {
 		}
 	}
 
+	scheme := "http"
+	if proto := input.request.Header.Get("X-Forwarded-Proto"); proto != "" {
+		scheme = proto
+	}
+
 	resp := EchoModel{
 		Method:  input.request.Method,
 		Headers: headers,
 		Host:    input.request.Host,
-		URL:     input.request.URL.String(),
+		URL:     scheme + "://" + input.request.Host + input.request.URL.String(),
+		Path:    input.request.URL.Path,
+		Query:   query,
 		Body:    body,
 		Parsed:  parsed,
 	}
