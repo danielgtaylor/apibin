@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/danielgtaylor/huma"
 	"github.com/danielgtaylor/huma/conditional"
@@ -35,7 +36,7 @@ type EchoModel struct {
 	URL     string            `json:"url" doc:"Full URL"`
 	Path    string            `json:"path" doc:"URL path"`
 	Query   map[string]string `json:"query,omitempty" doc:"URL query parameters"`
-	Body    string            `json:"body,omitempty" doc:"Raw request body"`
+	Body    interface{}       `json:"body,omitempty" doc:"Raw request body, either a UTF-8 string or bytes"`
 	Parsed  interface{}       `json:"parsed,omitempty" doc:"Parsed request body"`
 }
 
@@ -82,13 +83,17 @@ func echoHandler(ctx huma.Context, input struct {
 		query[k] = input.request.URL.Query().Get(k)
 	}
 
-	body := ""
+	var body interface{}
 	var parsed interface{}
 	if input.request.Body != nil {
 		defer input.request.Body.Close()
 		b, err := ioutil.ReadAll(input.request.Body)
 		if err == nil {
-			body = string(b)
+			if utf8.Valid(b) {
+				body = string(b)
+			} else {
+				body = b
+			}
 			parsed = tryParse(input.request.Header.Get("Content-Type"), b)
 		}
 	}
