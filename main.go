@@ -27,6 +27,7 @@ Provides a simple, modern, example API that offers these features:
 - Cached responses to test proxy & client-side caching
 - Example structured data
 	- Shows off ^object^, ^array^, ^string^, ^date^, ^binary^, ^integer^, ^number^, ^boolean^, etc.
+- A sample CRUD API for books & reviews with simulated server-side updates
 - Image responses ^JPEG^, ^WEBP^, ^GIF^, ^PNG^ & ^HEIC^
 - [RFC7807](https://datatracker.ietf.org/doc/html/rfc7807) structured errors
 
@@ -222,6 +223,31 @@ func main() {
 			ctx.Write(exampleHeic)
 		}
 	})
+
+	// Books resources for a basic CRUD API.
+	booksCollection := app.Resource("/books")
+	booksCollection.Tags("Books")
+	booksCollection.Get("list-books", "List books and reviews",
+		responses.OK().Model([]BookSummary{}),
+	).Run(listBooks)
+
+	bookResource := booksCollection.SubResource("/{book-id}")
+	bookResource.Get("get-book", "Get a book",
+		responses.OK().Headers("Cache-Control", "Etag", "Last-Modified", "Vary").Model(&Book{}),
+		responses.NotFound(),
+	).Run(getBook)
+
+	putBookOp := bookResource.Put("put-book", "Put a book",
+		responses.NoContent(),
+	)
+	putBookOp.MaxBodyBytes(2048)
+	putBookOp.BodyReadTimeout(5 * time.Second)
+	putBookOp.Run(putBook)
+
+	bookResource.Delete("delete-book", "Delete a book",
+		responses.NoContent(),
+		responses.NotFound(),
+	).Run(deleteBook)
 
 	app.Run()
 }
