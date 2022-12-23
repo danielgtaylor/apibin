@@ -14,6 +14,7 @@ Provides a simple, modern, example API for demoing or debugging various features
 - Cached responses to test proxy & client-side caching
 - Example structured data
   - Shows off `object`, `array`, `string`, `date`, `binary`, `integer`, `number`, `boolean`, etc.
+- A sample CRUD API for books & reviews with simulated server-side updates
 - Image responses `JPEG`, `WEBP`, `GIF`, `PNG` & `HEIC`
 - [RFC7807](https://datatracker.ietf.org/doc/html/rfc7807) structured errors
 
