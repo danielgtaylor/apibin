@@ -165,11 +165,11 @@ func putBook(ctx huma.Context, input struct {
 		}
 	}
 
-	input.Body.modified = time.Now()
-	books[input.ID] = input.Body
 	if books[input.ID] == nil {
 		booksOrder = append(booksOrder, input.ID)
 	}
+	input.Body.modified = time.Now()
+	books[input.ID] = input.Body
 
 	// Limit the total number of books by deleting the oldest first. These will
 	// get reset periodically by the goroutine in `init()` above.
