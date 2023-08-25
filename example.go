@@ -1,40 +1,14 @@
 package main
 
 import (
+	"context"
 	_ "embed"
 	"encoding/json"
 	"net/http"
 	"time"
 
-	"github.com/danielgtaylor/huma"
+	"github.com/danielgtaylor/huma/v2"
 )
-
-// type Date time.Time
-
-// func (d *Date) UnmarshalJSON(b []byte) error {
-// 	parsed, _ := time.Parse("2006-01-02", strings.Trim(string(b), `"`))
-// 	*d = Date(parsed)
-// 	return nil
-// }
-
-// func (d Date) MarshalJSON() ([]byte, error) {
-// 	if time.Time(d).IsZero() {
-// 		return []byte{}, nil
-// 	}
-// 	return []byte(`"` + time.Time(d).Format("2006-01-02") + `"`), nil
-// }
-
-// func (d *Date) MarshalYAML() (interface{}, error) {
-// 	return time.Time(*d), nil
-// }
-
-// func (d Date) MarshalCBOR() ([]byte, error) {
-// 	opts := cbor.CanonicalEncOptions()
-// 	opts.Time = cbor.TimeRFC3339Nano
-// 	opts.TimeTag = cbor.EncTagRequired
-// 	mode, _ := opts.EncMode()
-// 	return mode.Marshal(time.Time(d))
-// }
 
 type Resume struct {
 	Basics    Basics      `json:"basics"`
@@ -143,7 +117,21 @@ func init() {
 	}
 }
 
-func exampleHandler(ctx huma.Context) {
-	ctx.Header().Set("ETag", `"`+exampleEtag+`"`)
-	ctx.WriteModel(http.StatusOK, example)
+type ExampleResponse struct {
+	ETag string `header:"ETag"`
+	Body Resume
+}
+
+func (s *APIServer) RegisterExample(api huma.API) {
+	huma.Register(api, huma.Operation{
+		OperationID: "get-example",
+		Method:      http.MethodGet,
+		Path:        "/example",
+		Description: "Example large structured data response",
+	}, func(ctx context.Context, i *struct{}) (*ExampleResponse, error) {
+		return &ExampleResponse{
+			ETag: exampleEtag,
+			Body: example,
+		}, nil
+	})
 }

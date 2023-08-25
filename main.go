@@ -1,19 +1,24 @@
 package main
 
 import (
+	"context"
+	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 	"time"
 
-	"github.com/danielgtaylor/huma"
-	"github.com/danielgtaylor/huma/cli"
-	"github.com/danielgtaylor/huma/negotiation"
-	"github.com/danielgtaylor/huma/responses"
+	"github.com/danielgtaylor/huma/v2"
+	"github.com/danielgtaylor/huma/v2/adapters/humachi"
+	"github.com/danielgtaylor/huma/v2/negotiation"
+	"github.com/go-chi/chi"
+	"github.com/go-chi/chi/middleware"
+	"github.com/spf13/cobra"
+	"gopkg.in/yaml.v2"
 )
 
-var docs = strings.Replace(`Example API
-[![HUMA Powered](https://img.shields.io/badge/Powered%20By-Huma-ff5f87)](https://huma.rocks/) [![Works With Restish](https://img.shields.io/badge/Works%20With-Restish-ff5f87)](https://rest.sh/) [![GitHub](https://img.shields.io/github/license/danielgtaylor/apibin)](https://github.com/danielgtaylor/apibin)
+var docs = strings.Replace(`[![HUMA Powered](https://img.shields.io/badge/Powered%20By-Huma-ff5f87)](https://huma.rocks/) [![Works With Restish](https://img.shields.io/badge/Works%20With-Restish-ff5f87)](https://rest.sh/) [![GitHub](https://img.shields.io/github/license/danielgtaylor/apibin)](https://github.com/danielgtaylor/apibin)
 
 Provides a simple, modern, example API that offers these features:
 
@@ -73,96 +78,93 @@ type TypesModel struct {
 	Object   SubObject `json:"object"`
 }
 
-func main() {
-	app := cli.NewRouter(docs, "1.0.0")
+type TypesResponse struct {
+	Body TypesModel
+}
 
-	// Serve the docs at the root of the API if hit by a browser.
-	app.Middleware(func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+type APIServer struct{}
 
-			if r.Method == http.MethodGet && r.URL.Path == "/" && strings.Contains(r.Header.Get("User-Agent"), "Mozilla") && negotiation.SelectQValue(r.Header.Get("Accept"), []string{"text/html", "application/json", "application/cbor"}) == "text/html" {
-				huma.SwaggerUIHandler(app.Router).ServeHTTP(w, r)
-				return
-			}
-
-			next.ServeHTTP(w, r)
-		})
-	})
-
-	// Echo back what the user sends in.
-	echo := app.Resource("/")
-	echo.Tags("Echo")
-	echoResp := huma.
-		NewResponse(0, "Default response").
-		Headers("Content-Type", "Cache-Control", "Link", "Last-Modified", "Etag", "Vary").
-		Model(EchoModel{})
-	echo.Get("get-echo", "Echo GET", echoResp).Run(echoHandler)
-	echo.Post("post-echo", "Echo POST", echoResp).Run(echoHandler)
-	echo.Put("put-echo", "Echo PUT", echoResp).Run(echoHandler)
-	echo.Patch("patch-echo", "Echo PATCH", echoResp).Run(echoHandler)
-	echo.Delete("delete-echo", "Echo DELETE", echoResp).Run(echoHandler)
-
-	// Example data
-	types := app.Resource("/types")
-	types.Tags("Example")
-	types.Get("get-types-example", "Example structured data types",
-		responses.OK().Headers("Last-Modified", "Etag").Model(TypesModel{}),
-	).Run(func(ctx huma.Context) {
-		ctx.WriteModel(http.StatusOK, TypesModel{
-			Boolean: true,
-			Integer: 42,
-			Number:  123.45,
-			String:  "Hello, world!",
-			Tags:    []string{"example", "short"},
-			Object: SubObject{
-				Binary:     []byte{222, 173, 192, 222},
-				BinaryLong: []byte{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15},
-				Date:       time.Now().UTC().Truncate(24 * time.Hour),
-				DateTime:   time.Now().UTC(),
-				URL:        "https://rest.sh/",
+func (s *APIServer) RegisterTypes(api huma.API) {
+	huma.Register(api, huma.Operation{
+		OperationID: "get-types-example",
+		Method:      http.MethodGet,
+		Path:        "/types",
+		Description: "Example structured data types",
+	}, func(ctx context.Context, i *struct{}) (*TypesResponse, error) {
+		return &TypesResponse{
+			Body: TypesModel{
+				Boolean: true,
+				Integer: 42,
+				Number:  123.45,
+				String:  "Hello, world!",
+				Tags:    []string{"example", "short"},
+				Object: SubObject{
+					Binary:     []byte{222, 173, 192, 222},
+					BinaryLong: []byte{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15},
+					Date:       time.Now().UTC().Truncate(24 * time.Hour),
+					DateTime:   time.Now().UTC(),
+					URL:        "https://rest.sh/",
+				},
 			},
-		})
+		}, nil
 	})
-	types.Put("put-types-example", "Example write for edits", echoResp).Run(echoHandler)
 
-	example := app.Resource("/example")
-	example.Tags("Example")
-	example.Get("get-example", "Example large structured data response",
-		responses.OK().Headers("Last-Modified", "Etag").Model(Resume{}),
-	).Run(exampleHandler)
+	huma.Register(api, huma.Operation{
+		OperationID: "put-types-example",
+		Method:      http.MethodPut,
+		Path:        "/types",
+		Description: "Example write for edits",
+	}, s.echoHandler)
+}
 
-	// Cached response
-	cached := app.Resource("/cached/{seconds}")
-	cached.Tags("Cached")
-	cached.Get("get-cached", "Cached response example",
-		responses.OK().Headers("Cache-Control").Model(CachedModel{}),
-	).Run(func(ctx huma.Context, input struct {
+type CachedResponse struct {
+	CacheControl string `header:"Cache-Control"`
+	Body         CachedModel
+}
+
+func (s *APIServer) RegisterCached(api huma.API) {
+	huma.Register(api, huma.Operation{
+		OperationID: "get-cached",
+		Method:      http.MethodGet,
+		Path:        "/cached/{seconds}",
+		Description: "Cached response example",
+	}, func(ctx context.Context, input *struct {
 		Seconds int  `path:"seconds" minimum:"1" maximum:"300" doc:"Number of seconds to cache"`
 		Private bool `query:"private" doc:"Disabled shared caches like CDNs"`
-	}) {
+	}) (*CachedResponse, error) {
 		header := fmt.Sprintf("max-age=%d", input.Seconds)
 		if input.Private {
 			header = "private, " + header
 		}
-		ctx.Header().Set("Cache-Control", header)
-		ctx.WriteModel(http.StatusOK, CachedModel{
-			Generated: time.Now(),
-			Until:     time.Now().Add(time.Duration(input.Seconds) * time.Second),
-		})
+		return &CachedResponse{
+			CacheControl: header,
+			Body: CachedModel{
+				Generated: time.Now(),
+				Until:     time.Now().Add(time.Duration(input.Seconds) * time.Second),
+			},
+		}, nil
 	})
+}
 
-	// Example paginated response (via rel=next)
-	images := app.Resource("/images")
-	images.Tags("Images")
-	images.Get("list-images", "Paginated list of all images",
-		responses.OK().Headers("Link").Model([]ImageItem{}),
-	).Run(func(ctx huma.Context, input struct {
+type ListImagesResponse struct {
+	Link string `header:"Link"`
+	Body []ImageItem
+}
+
+func (s *APIServer) RegisterListImages(api huma.API) {
+	huma.Register(api, huma.Operation{
+		OperationID: "list-images",
+		Method:      http.MethodGet,
+		Path:        "/images",
+		Description: "List available images",
+	}, func(ctx context.Context, input *struct {
 		Cursor string `query:"cursor" doc:"Pagination cursor"`
-	}) {
+	}) (*ListImagesResponse, error) {
 		// Return different pages based on the cursor.
+		resp := &ListImagesResponse{}
 		if input.Cursor == "" {
-			ctx.Header().Set("Link", "</images?cursor=abc123>; rel=\"next\"")
-			ctx.WriteModel(http.StatusOK, []ImageItem{
+			resp.Link = "</images?cursor=abc123>; rel=\"next\""
+			resp.Body = []ImageItem{
 				{
 					Name:   "Dragonfly macro",
 					Format: "jpeg",
@@ -173,81 +175,137 @@ func main() {
 					Format: "webp",
 					Self:   "/images/webp",
 				},
-			})
+			}
 		} else if input.Cursor == "abc123" {
-			ctx.Header().Set("Link", "</images?cursor=def456>; rel=\"next\"")
-			ctx.WriteModel(http.StatusOK, []ImageItem{
-				{
-					Name:   "Andy Warhol mural in Miami",
-					Format: "gif",
-					Self:   "/images/gif",
-				},
+			resp.Link = "</images?cursor=def456>; rel=\"next\""
+			resp.Body = []ImageItem{{
+				Name:   "Andy Warhol mural in Miami",
+				Format: "gif",
+				Self:   "/images/gif",
+			},
 				{
 					Name:   "Station in Prague",
 					Format: "png",
 					Self:   "/images/png",
 				},
-			})
+			}
 		} else if input.Cursor == "def456" {
-			ctx.WriteModel(http.StatusOK, []ImageItem{
+			resp.Body = []ImageItem{
 				{
 					Name:   "Chihuly glass in boats",
 					Format: "heic",
 					Self:   "/images/heic",
 				},
-			})
-
-		} else {
-			ctx.WriteModel(http.StatusOK, []ImageItem{})
+			}
 		}
+		return resp, nil
 	})
+}
 
-	// Image binary response
-	images.SubResource("/{type}").Get("get-image", "Get an image",
-		responses.OK().Headers("Content-Type"),
-	).Run(func(ctx huma.Context, input struct {
+type GetImageResponse struct {
+	ContentType string `header:"Content-Type"`
+	Body        []byte
+}
+
+func (s *APIServer) RegisterGetImage(api huma.API) {
+	huma.Register(api, huma.Operation{
+		OperationID: "get-image",
+		Method:      http.MethodGet,
+		Path:        "/images/{type}",
+		Description: "Get an image",
+	}, func(ctx context.Context, i *struct {
 		Type string `path:"type" enum:"jpeg,webp,png,gif,heic"`
-	}) {
-		ctx.Header().Set("Content-Type", "image/"+input.Type)
-
-		switch input.Type {
+	}) (*GetImageResponse, error) {
+		var body []byte
+		switch i.Type {
 		case "jpeg":
-			ctx.Write(exampleJPEG)
+			body = exampleJPEG
 		case "webp":
-			ctx.Write(exampleWEBP)
+			body = exampleWEBP
 		case "png":
-			ctx.Write(examplePNG)
+			body = examplePNG
 		case "gif":
-			ctx.Write(exampleGIF)
+			body = exampleGIF
 		case "heic":
-			ctx.Write(exampleHeic)
+			body = exampleHeic
 		}
+		return &GetImageResponse{
+			ContentType: "image/" + i.Type,
+			Body:        body,
+		}, nil
+	})
+}
+
+type Options struct {
+	Host string `doc:"Host to listen on"`
+	Port int    `default:"8888" doc:"Port to listen on"`
+}
+
+func main() {
+	var api huma.API
+
+	cli := huma.NewCLI(func(hooks huma.Hooks, opts *Options) {
+		router := chi.NewMux()
+
+		router.Use(middleware.Recoverer)
+		router.Use(ContentEncoding)
+
+		router.Use(func(next http.Handler) http.Handler {
+			return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.Method == http.MethodGet && r.URL.Path == "/" && strings.Contains(r.Header.Get("User-Agent"), "Mozilla") && negotiation.SelectQValueFast(r.Header.Get("Accept"), []string{"text/html", "application/json", "application/cbor"}) == "text/html" {
+					r.URL.Path = "/docs"
+				}
+
+				next.ServeHTTP(w, r)
+			})
+		})
+
+		config := huma.DefaultConfig("Example API", "1.0.0")
+		config.Info.Description = docs
+
+		yamlFormat := huma.Format{
+			Marshal: func(writer io.Writer, v any) error {
+				return yaml.NewEncoder(writer).Encode(v)
+			},
+			Unmarshal: func(data []byte, v any) error {
+				return yaml.Unmarshal(data, v)
+			},
+		}
+		config.Formats["application/yaml"] = yamlFormat
+		config.Formats["yaml"] = yamlFormat
+
+		api = humachi.New(router, config)
+
+		server := APIServer{}
+		huma.AutoRegister(api, &server)
+
+		httpServer := http.Server{
+			Addr:              fmt.Sprintf("%s:%d", opts.Host, opts.Port),
+			ReadTimeout:       5 * time.Second,
+			ReadHeaderTimeout: 1 * time.Second,
+			WriteTimeout:      10 * time.Second,
+			IdleTimeout:       30 * time.Second,
+			Handler:           router,
+		}
+
+		hooks.OnStart(func() {
+			fmt.Println("Starting server on http://" + httpServer.Addr)
+			httpServer.ListenAndServe()
+		})
+
+		hooks.OnStop(func() {
+			httpServer.Shutdown(context.Background())
+		})
 	})
 
-	// Books resources for a basic CRUD API.
-	booksCollection := app.Resource("/books")
-	booksCollection.Tags("Books")
-	booksCollection.Get("list-books", "List books and reviews",
-		responses.OK().Model([]BookSummary{}),
-	).Run(listBooks)
+	cli.Root().AddCommand(&cobra.Command{
+		Use:   "openapi",
+		Short: "Generate OpenAPI spec",
+		Run: func(cmd *cobra.Command, args []string) {
+			b, _ := json.MarshalIndent(api.OpenAPI(), "", "  ")
+			fmt.Println(string(b))
+		},
+	})
 
-	bookResource := booksCollection.SubResource("/{book-id}")
-	bookResource.Get("get-book", "Get a book",
-		responses.OK().Headers("Cache-Control", "Etag", "Last-Modified", "Vary").Model(&Book{}),
-		responses.NotFound(),
-	).Run(getBook)
-
-	putBookOp := bookResource.Put("put-book", "Put a book",
-		responses.NoContent(),
-	)
-	putBookOp.MaxBodyBytes(2048)
-	putBookOp.BodyReadTimeout(5 * time.Second)
-	putBookOp.Run(putBook)
-
-	bookResource.Delete("delete-book", "Delete a book",
-		responses.NoContent(),
-		responses.NotFound(),
-	).Run(deleteBook)
-
-	app.Run()
+	cli.Run()
 }

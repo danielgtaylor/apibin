@@ -1,32 +1,30 @@
 package main
 
 import (
+	"context"
 	"encoding/base64"
 	"encoding/binary"
-	"encoding/json"
-	"io"
-	"io/ioutil"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 	"unicode/utf8"
 
-	"github.com/danielgtaylor/huma"
-	"github.com/danielgtaylor/huma/conditional"
+	"github.com/danielgtaylor/huma/v2"
+	"github.com/danielgtaylor/huma/v2/conditional"
 	"github.com/fxamacker/cbor/v2"
-	msgpack "github.com/shamaton/msgpack/v2"
 	"github.com/zeebo/xxh3"
-	"gopkg.in/yaml.v2"
 )
 
 type RequestInfo struct {
 	// You should generally not do this, but we want to introspect the request
 	// itself and echo it back, so we need to store its info.
-	request *http.Request
+	ctx huma.Context
 }
 
-func (r *RequestInfo) Resolve(ctx huma.Context, req *http.Request) {
-	r.request = req
+func (r *RequestInfo) Resolve(ctx huma.Context) []error {
+	r.ctx = ctx
+	return nil
 }
 
 type EchoModel struct {
@@ -38,21 +36,6 @@ type EchoModel struct {
 	Query   map[string]string `json:"query,omitempty" doc:"URL query parameters"`
 	Body    interface{}       `json:"body,omitempty" doc:"Raw request body, either a UTF-8 string or bytes"`
 	Parsed  interface{}       `json:"parsed,omitempty" doc:"Parsed request body"`
-}
-
-func tryParse(contentType string, body []byte) interface{} {
-	var result interface{}
-	switch {
-	case strings.Contains(contentType, "json"):
-		json.Unmarshal(body, &result)
-	case strings.Contains(contentType, "yaml"):
-		yaml.Unmarshal(body, &result)
-	case strings.Contains(contentType, "cbor"):
-		cbor.Unmarshal(body, &result)
-	case strings.Contains(contentType, "msgpack"):
-		msgpack.Unmarshal(body, &result)
-	}
-	return result
 }
 
 func genETag(v interface{}) string {
@@ -67,64 +50,92 @@ func genETagBytes(b []byte) string {
 	return base64.RawURLEncoding.EncodeToString(sum)
 }
 
-func echoHandler(ctx huma.Context, input struct {
+type EchoResponse struct {
+	Status int
+
+	CacheControl string    `header:"Cache-Control"`
+	ETag         string    `header:"ETag"`
+	LastModified time.Time `header:"Last-Modified"`
+	Vary         string    `header:"Vary"`
+
+	Body EchoModel
+}
+
+func (s *APIServer) echoHandler(ctx context.Context, input *struct {
 	RequestInfo
 	Status int `query:"status" default:"200" minimum:"100" maximum:"599" doc:"Status code to return"`
 	conditional.Params
-	Body io.Reader
-}) {
+	Body    any
+	RawBody []byte
+}) (*EchoResponse, error) {
 	headers := map[string]string{}
-	for k, v := range input.request.Header {
-		headers[k] = strings.Join(v, ", ")
-	}
+	input.ctx.EachHeader(func(name, value string) {
+		headers[name] = value
+	})
+
+	reqURL := input.ctx.URL()
 
 	query := map[string]string{}
-	for k := range input.request.URL.Query() {
-		query[k] = input.request.URL.Query().Get(k)
-	}
-
-	var body interface{}
-	var parsed interface{}
-	if input.request.Body != nil {
-		defer input.request.Body.Close()
-		b, err := ioutil.ReadAll(input.request.Body)
-		if err == nil {
-			if utf8.Valid(b) {
-				body = string(b)
-			} else {
-				body = b
-			}
-			parsed = tryParse(input.request.Header.Get("Content-Type"), b)
-		}
+	values, _ := url.ParseQuery(reqURL.RawQuery)
+	for k := range values {
+		query[k] = values.Get(k)
 	}
 
 	scheme := "http"
-	if proto := input.request.Header.Get("X-Forwarded-Proto"); proto != "" {
+	if proto := input.ctx.Header("X-Forwarded-Proto"); proto != "" {
 		scheme = proto
 	}
 
-	resp := EchoModel{
-		Method:  input.request.Method,
+	var rawBody any
+	if len(input.RawBody) > 0 {
+		if utf8.Valid(input.RawBody) {
+			rawBody = string(input.RawBody)
+		} else {
+			rawBody = input.RawBody
+		}
+	}
+
+	resp := &EchoResponse{}
+	resp.Body = EchoModel{
+		Method:  input.ctx.Method(),
 		Headers: headers,
-		Host:    input.request.Host,
-		URL:     scheme + "://" + input.request.Host + input.request.URL.String(),
-		Path:    input.request.URL.Path,
+		Host:    input.ctx.Host(),
+		URL:     scheme + "://" + input.ctx.Host() + reqURL.String(),
+		Path:    reqURL.Path,
 		Query:   query,
-		Body:    body,
-		Parsed:  parsed,
+		Body:    rawBody,
+		Parsed:  input.Body,
 	}
 
 	lastModified, _ := time.Parse(time.RFC3339, "2022-02-01T12:34:56Z")
 	etag := genETag(resp)
 
-	if input.PreconditionFailed(ctx, etag, lastModified) {
-		return
+	if err := input.PreconditionFailed(etag, lastModified); err != nil {
+		return nil, err
 	}
 
-	ctx.Header().Set("Cache-Control", "no-store")
-	ctx.Header().Set("Vary", "*")
-	ctx.Header().Set("Last-Modified", lastModified.Format(http.TimeFormat))
-	ctx.Header().Set("ETag", `"`+etag+`"`)
+	resp.Status = input.Status
 
-	ctx.WriteModel(input.Status, resp)
+	resp.CacheControl = "no-store"
+	resp.Vary = "*"
+	resp.LastModified = lastModified
+	resp.ETag = etag
+
+	return resp, nil
+}
+
+func (s *APIServer) RegisterEcho(api huma.API) {
+	for _, method := range []string{
+		http.MethodGet,
+		http.MethodPost,
+		http.MethodPut,
+		http.MethodPatch,
+		http.MethodDelete,
+	} {
+		huma.Register(api, huma.Operation{
+			OperationID: strings.ToLower(method) + "-echo",
+			Method:      method,
+			Path:        "/",
+		}, s.echoHandler)
+	}
 }
