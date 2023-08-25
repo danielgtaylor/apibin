@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	_ "embed"
 	"encoding/base64"
 	"encoding/json"
@@ -10,8 +11,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/danielgtaylor/huma"
-	"github.com/danielgtaylor/huma/conditional"
+	"github.com/danielgtaylor/huma/v2"
+	"github.com/danielgtaylor/huma/v2/conditional"
 	"golang.org/x/exp/maps"
 	"golang.org/x/exp/slices"
 )
@@ -108,98 +109,141 @@ func init() {
 	}()
 }
 
-func listBooks(ctx huma.Context) {
-	booksMu.RLock()
-	defer booksMu.RUnlock()
-
-	// Return a list of summaries with metadata about each book.
-	l := make([]BookSummary, 0, len(books))
-	for _, k := range booksOrder {
-		b := books[k]
-		l = append(l, BookSummary{
-			URL:      "/books/" + k,
-			Version:  b.Version(),
-			Modified: b.modified,
-		})
-	}
-
-	ctx.WriteModel(http.StatusOK, l)
+type ListResponse struct {
+	Body []BookSummary
 }
 
-func getBook(ctx huma.Context, input struct {
-	ID string `path:"book-id"`
-	conditional.Params
-}) {
-	booksMu.RLock()
-	defer booksMu.RUnlock()
+func (s *APIServer) RegisterListBooks(api huma.API) {
+	huma.Register(api, huma.Operation{
+		OperationID: "list-books",
+		Method:      http.MethodGet,
+		Path:        "/books",
+	}, func(ctx context.Context, input *struct{}) (*ListResponse, error) {
+		booksMu.RLock()
+		defer booksMu.RUnlock()
 
-	b := books[input.ID]
-	if b == nil {
-		ctx.WriteError(http.StatusNotFound, input.ID+" not found")
-		return
-	}
+		// Return a list of summaries with metadata about each book.
+		l := make([]BookSummary, 0, len(books))
+		for _, k := range booksOrder {
+			b := books[k]
+			l = append(l, BookSummary{
+				URL:      "/books/" + k,
+				Version:  b.Version(),
+				Modified: b.modified,
+			})
+		}
 
-	if input.PreconditionFailed(ctx, b.Version(), b.modified) {
-		return
-	}
-
-	ctx.Header().Set("Cache-Control", "max-age:0")
-	ctx.Header().Set("Etag", b.Version())
-	ctx.Header().Set("Last-Modified", b.modified.Format(http.TimeFormat))
-	ctx.Header().Set("Vary", "Accept, Accept-Encoding, Origin")
-	ctx.WriteModel(http.StatusOK, b)
+		return &ListResponse{Body: l}, nil
+	})
 }
 
-func putBook(ctx huma.Context, input struct {
-	ID   string `path:"book-id"`
+type GetBookResponse struct {
+	CacheControl string    `header:"Cache-Control"`
+	ETag         string    `header:"Etag"`
+	LastModified time.Time `header:"Last-Modified"`
+	Vary         string    `header:"Vary"`
+
 	Body *Book
-	conditional.Params
-}) {
-	booksMu.Lock()
-	defer booksMu.Unlock()
-
-	if input.HasConditionalParams() {
-		existing := books[input.ID]
-		if existing != nil && input.PreconditionFailed(ctx, existing.Version(), existing.modified) {
-			return
-		}
-	}
-
-	if books[input.ID] == nil {
-		booksOrder = append(booksOrder, input.ID)
-	}
-	input.Body.modified = time.Now()
-	books[input.ID] = input.Body
-
-	// Limit the total number of books by deleting the oldest first. These will
-	// get reset periodically by the goroutine in `init()` above.
-	for len(books) > 20 {
-		delete(books, booksOrder[0])
-		booksOrder = booksOrder[1:]
-	}
-
-	ctx.WriteHeader(http.StatusNoContent)
 }
 
-func deleteBook(ctx huma.Context, input struct {
-	ID string `path:"book-id"`
-	conditional.Params
-}) {
-	booksMu.Lock()
-	defer booksMu.Unlock()
+func (s *APIServer) RegisterGetBook(api huma.API) {
+	huma.Register(api, huma.Operation{
+		OperationID: "get-book",
+		Method:      http.MethodGet,
+		Path:        "/books/{book-id}",
+	}, func(ctx context.Context, input *struct {
+		conditional.Params
+		ID string `path:"book-id"`
+	}) (*GetBookResponse, error) {
+		booksMu.RLock()
+		defer booksMu.RUnlock()
 
-	if input.HasConditionalParams() {
-		existing := books[input.ID]
-		if existing != nil && input.PreconditionFailed(ctx, existing.Version(), existing.modified) {
-			return
+		b := books[input.ID]
+		if b == nil {
+			return nil, huma.Error404NotFound(input.ID + " not found")
 		}
-	}
 
-	// Remove the book from both the map and the slice.
-	delete(books, input.ID)
-	if idx := slices.Index(booksOrder, input.ID); idx > -1 {
-		booksOrder = slices.Delete(booksOrder, idx, idx+1)
-	}
+		if err := input.PreconditionFailed(b.Version(), b.modified); err != nil {
+			return nil, err
+		}
 
-	ctx.WriteHeader(http.StatusNoContent)
+		resp := &GetBookResponse{
+			CacheControl: "max-age:0",
+			ETag:         b.Version(),
+			LastModified: b.modified,
+			Vary:         "Accept, Accept-Encoding, Origin",
+			Body:         b,
+		}
+		return resp, nil
+	})
+}
+
+func (s *APIServer) RegisterPutBook(api huma.API) {
+	huma.Register(api, huma.Operation{
+		OperationID: "put-book",
+		Method:      http.MethodPut,
+		Path:        "/books/{book-id}",
+	}, func(ctx context.Context, input *struct {
+		conditional.Params
+		ID   string `path:"book-id"`
+		Body Book
+	}) (*struct{}, error) {
+		booksMu.Lock()
+		defer booksMu.Unlock()
+
+		if input.HasConditionalParams() {
+			existing := books[input.ID]
+			if existing != nil {
+				if err := input.PreconditionFailed(existing.Version(), existing.modified); err != nil {
+					return nil, err
+				}
+			}
+		}
+
+		if books[input.ID] == nil {
+			booksOrder = append(booksOrder, input.ID)
+		}
+		input.Body.modified = time.Now()
+		books[input.ID] = &input.Body
+
+		// Limit the total number of books by deleting the oldest first. These will
+		// get reset periodically by the goroutine in `init()` above.
+		for len(books) > 20 {
+			delete(books, booksOrder[0])
+			booksOrder = booksOrder[1:]
+		}
+
+		return nil, nil
+	})
+}
+
+func (s *APIServer) RegisterDeleteBook(api huma.API) {
+	huma.Register(api, huma.Operation{
+		OperationID: "delete-book",
+		Method:      http.MethodDelete,
+		Path:        "/books/{book-id}",
+	}, func(ctx context.Context, input *struct {
+		conditional.Params
+		ID string `path:"book-id"`
+	}) (*struct{}, error) {
+		booksMu.Lock()
+		defer booksMu.Unlock()
+
+		if input.HasConditionalParams() {
+			existing := books[input.ID]
+			if existing != nil {
+				if err := input.PreconditionFailed(existing.Version(), existing.modified); err != nil {
+					return nil, err
+				}
+			}
+		}
+
+		// Remove the book from both the map and the slice.
+		delete(books, input.ID)
+		if idx := slices.Index(booksOrder, input.ID); idx > -1 {
+			booksOrder = slices.Delete(booksOrder, idx, idx+1)
+		}
+
+		return nil, nil
+	})
 }
