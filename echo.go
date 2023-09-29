@@ -136,6 +136,7 @@ func (s *APIServer) RegisterEcho(api huma.API) {
 			OperationID: strings.ToLower(method) + "-echo",
 			Method:      method,
 			Path:        "/",
+			Tags:        []string{"Echo"},
 		}, s.echoHandler)
 	}
 }

@@ -12,8 +12,8 @@ import (
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/danielgtaylor/huma/v2/adapters/humachi"
 	"github.com/danielgtaylor/huma/v2/negotiation"
-	"github.com/go-chi/chi"
-	"github.com/go-chi/chi/middleware"
+	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/chi/v5/middleware"
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v2"
 )
@@ -90,6 +90,7 @@ func (s *APIServer) RegisterTypes(api huma.API) {
 		Method:      http.MethodGet,
 		Path:        "/types",
 		Description: "Example structured data types",
+		Tags:        []string{"Types"},
 	}, func(ctx context.Context, i *struct{}) (*TypesResponse, error) {
 		return &TypesResponse{
 			Body: TypesModel{
@@ -114,6 +115,7 @@ func (s *APIServer) RegisterTypes(api huma.API) {
 		Method:      http.MethodPut,
 		Path:        "/types",
 		Description: "Example write for edits",
+		Tags:        []string{"Types"},
 	}, s.echoHandler)
 }
 
@@ -128,6 +130,7 @@ func (s *APIServer) RegisterCached(api huma.API) {
 		Method:      http.MethodGet,
 		Path:        "/cached/{seconds}",
 		Description: "Cached response example",
+		Tags:        []string{"Caching"},
 	}, func(ctx context.Context, input *struct {
 		Seconds int  `path:"seconds" minimum:"1" maximum:"300" doc:"Number of seconds to cache"`
 		Private bool `query:"private" doc:"Disabled shared caches like CDNs"`
@@ -146,6 +149,32 @@ func (s *APIServer) RegisterCached(api huma.API) {
 	})
 }
 
+type StatusResponse struct {
+	Status     int
+	RetryAfter string `header:"Retry-After"`
+	XRetryIn   string `header:"X-Retry-In"`
+}
+
+func (s *APIServer) RegisterStatus(api huma.API) {
+	huma.Register(api, huma.Operation{
+		OperationID: "get-status",
+		Method:      http.MethodGet,
+		Path:        "/status/{code}",
+		Description: "Status code example",
+		Tags:        []string{"Status"},
+	}, func(ctx context.Context, input *struct {
+		Code       int    `path:"code" minimum:"100" maximum:"599" doc:"Status code to return"`
+		RetryAfter string `query:"retry-after" doc:"Retry-After header value"`
+		XRetryIn   string `query:"x-retry-in" doc:"X-Retry-In header value"`
+	}) (*StatusResponse, error) {
+		return &StatusResponse{
+			Status:     input.Code,
+			RetryAfter: input.RetryAfter,
+			XRetryIn:   input.XRetryIn,
+		}, nil
+	})
+}
+
 type ListImagesResponse struct {
 	Link string `header:"Link"`
 	Body []ImageItem
@@ -157,6 +186,7 @@ func (s *APIServer) RegisterListImages(api huma.API) {
 		Method:      http.MethodGet,
 		Path:        "/images",
 		Description: "List available images",
+		Tags:        []string{"Images"},
 	}, func(ctx context.Context, input *struct {
 		Cursor string `query:"cursor" doc:"Pagination cursor"`
 	}) (*ListImagesResponse, error) {
@@ -213,6 +243,7 @@ func (s *APIServer) RegisterGetImage(api huma.API) {
 		Method:      http.MethodGet,
 		Path:        "/images/{type}",
 		Description: "Get an image",
+		Tags:        []string{"Images"},
 	}, func(ctx context.Context, i *struct {
 		Type string `path:"type" enum:"jpeg,webp,png,gif,heic"`
 	}) (*GetImageResponse, error) {
@@ -262,6 +293,9 @@ func main() {
 
 		config := huma.DefaultConfig("Example API", "1.0.0")
 		config.Info.Description = docs
+		config.Servers = []*huma.Server{
+			{URL: "https://api.rest.sh"},
+		}
 
 		yamlFormat := huma.Format{
 			Marshal: func(writer io.Writer, v any) error {

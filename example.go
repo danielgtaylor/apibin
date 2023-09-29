@@ -128,6 +128,7 @@ func (s *APIServer) RegisterExample(api huma.API) {
 		Method:      http.MethodGet,
 		Path:        "/example",
 		Description: "Example large structured data response",
+		Tags:        []string{"Example"},
 	}, func(ctx context.Context, i *struct{}) (*ExampleResponse, error) {
 		return &ExampleResponse{
 			ETag: exampleEtag,
