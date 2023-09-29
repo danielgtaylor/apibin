@@ -118,6 +118,7 @@ func (s *APIServer) RegisterListBooks(api huma.API) {
 		OperationID: "list-books",
 		Method:      http.MethodGet,
 		Path:        "/books",
+		Tags:        []string{"Books"},
 	}, func(ctx context.Context, input *struct{}) (*ListResponse, error) {
 		booksMu.RLock()
 		defer booksMu.RUnlock()
@@ -151,6 +152,7 @@ func (s *APIServer) RegisterGetBook(api huma.API) {
 		OperationID: "get-book",
 		Method:      http.MethodGet,
 		Path:        "/books/{book-id}",
+		Tags:        []string{"Books"},
 	}, func(ctx context.Context, input *struct {
 		conditional.Params
 		ID string `path:"book-id"`
@@ -183,6 +185,7 @@ func (s *APIServer) RegisterPutBook(api huma.API) {
 		OperationID: "put-book",
 		Method:      http.MethodPut,
 		Path:        "/books/{book-id}",
+		Tags:        []string{"Books"},
 	}, func(ctx context.Context, input *struct {
 		conditional.Params
 		ID   string `path:"book-id"`
@@ -222,6 +225,7 @@ func (s *APIServer) RegisterDeleteBook(api huma.API) {
 		OperationID: "delete-book",
 		Method:      http.MethodDelete,
 		Path:        "/books/{book-id}",
+		Tags:        []string{"Books"},
 	}, func(ctx context.Context, input *struct {
 		conditional.Params
 		ID string `path:"book-id"`
