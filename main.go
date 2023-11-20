@@ -11,6 +11,7 @@ import (
 
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/danielgtaylor/huma/v2/adapters/humachi"
+	"github.com/danielgtaylor/huma/v2/autopatch"
 	"github.com/danielgtaylor/huma/v2/negotiation"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
@@ -310,8 +311,20 @@ func main() {
 
 		api = humachi.New(router, config)
 
+		router.NotFound(func(w http.ResponseWriter, r *http.Request) {
+			ctx := humachi.NewContext(nil, r, w)
+			huma.WriteErr(api, ctx, http.StatusNotFound, "The requested resource was not found")
+		})
+
+		router.MethodNotAllowed(func(w http.ResponseWriter, r *http.Request) {
+			ctx := humachi.NewContext(nil, r, w)
+			huma.WriteErr(api, ctx, http.StatusMethodNotAllowed, "HTTP method is not allowed on the given resource")
+		})
+
 		server := APIServer{}
 		huma.AutoRegister(api, &server)
+
+		autopatch.AutoPatch(api)
 
 		httpServer := http.Server{
 			Addr:              fmt.Sprintf("%s:%d", opts.Host, opts.Port),
