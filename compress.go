@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"path"
 	"strconv"
+	"strings"
 	"sync"
 
 	"github.com/andybalholm/brotli"
@@ -20,6 +21,7 @@ const brotliEncoding = "br"
 
 var supportedEncodings []string = []string{brotliEncoding, gzipEncoding}
 var compressDenyList []string = []string{".gif", ".png", ".jpg", ".jpeg", ".zip", ".gz", ".bz2"}
+var compressDenyPaths []string = []string{"/sse/metrics"}
 
 type contentEncodingWriter struct {
 	http.ResponseWriter
@@ -130,6 +132,14 @@ func ContentEncoding(next http.Handler) http.Handler {
 	}
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		for _, deny := range compressDenyPaths {
+			if strings.HasPrefix(r.URL.Path, deny) {
+				// This is a path we should not try to compress.
+				next.ServeHTTP(w, r)
+				return
+			}
+		}
+
 		if ext := path.Ext(r.URL.Path); ext != "" {
 			for _, deny := range compressDenyList {
 				if ext == deny {

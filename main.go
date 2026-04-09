@@ -35,6 +35,7 @@ Provides a simple, modern, example API that offers these features:
 	- Shows off ^object^, ^array^, ^string^, ^date^, ^binary^, ^integer^, ^number^, ^boolean^, etc.
 - A sample CRUD API for books & reviews with simulated server-side updates
 - Image responses ^JPEG^, ^WEBP^, ^GIF^, ^PNG^ & ^HEIC^
+- [Server-Sent Events](https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events) streaming with JSON events
 - [RFC7807](https://datatracker.ietf.org/doc/html/rfc7807) structured errors
 
 This project is open source: [https://github.com/danielgtaylor/apibin](https://github.com/danielgtaylor/apibin)
@@ -330,7 +331,7 @@ func main() {
 			Addr:              fmt.Sprintf("%s:%d", opts.Host, opts.Port),
 			ReadTimeout:       5 * time.Second,
 			ReadHeaderTimeout: 1 * time.Second,
-			WriteTimeout:      10 * time.Second,
+			WriteTimeout:      0, // SSE streams require no write deadline
 			IdleTimeout:       30 * time.Second,
 			Handler:           router,
 		}
