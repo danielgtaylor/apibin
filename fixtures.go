@@ -587,11 +587,13 @@ func (s *APIServer) RegisterRedirects(api huma.API) {
 	} {
 		abs := route.Abs
 		huma.Register(api, huma.Operation{
-			OperationID: route.ID,
-			Method:      http.MethodGet,
-			Path:        route.Path,
-			Summary:     "Redirect a configurable number of times",
-			Tags:        []string{"Redirects"},
+			OperationID:   route.ID,
+			Method:        http.MethodGet,
+			Path:          route.Path,
+			Summary:       "Redirect a configurable number of times",
+			Tags:          []string{"Redirects"},
+			DefaultStatus: http.StatusFound,
+			Responses:     redirectResponses(http.StatusFound),
 		}, func(ctx context.Context, input *struct {
 			RequestInfo
 			N int `path:"n" minimum:"1" maximum:"20"`
@@ -614,11 +616,13 @@ func (s *APIServer) RegisterRedirects(api huma.API) {
 	}
 
 	huma.Register(api, huma.Operation{
-		OperationID: "get-redirect-to",
-		Method:      http.MethodGet,
-		Path:        "/redirect-to",
-		Summary:     "Redirect to a supplied URL",
-		Tags:        []string{"Redirects"},
+		OperationID:   "get-redirect-to",
+		Method:        http.MethodGet,
+		Path:          "/redirect-to",
+		Summary:       "Redirect to a supplied URL",
+		Tags:          []string{"Redirects"},
+		DefaultStatus: http.StatusFound,
+		Responses:     redirectRangeResponses(),
 	}, func(ctx context.Context, input *struct {
 		RequestInfo
 		URL        string `query:"url" required:"true"`
@@ -991,14 +995,63 @@ func (s *APIServer) RegisterAcceptImage(api huma.API) {
 	}, func(ctx context.Context, input *struct {
 		RequestInfo
 	}) (*GetImageResponse, error) {
-		accept := input.ctx.Header("Accept")
-		for _, format := range []string{"png", "jpeg", "webp", "gif", "heic"} {
-			if strings.Contains(accept, "image/"+format) {
-				return imageResponse(format), nil
-			}
+		format, ok := acceptImageFormat(input.ctx.Header("Accept"))
+		if !ok {
+			return nil, huma.Error406NotAcceptable("no acceptable image format")
 		}
-		return imageResponse("png"), nil
+		return imageResponse(format), nil
 	})
+}
+
+func acceptImageFormat(accept string) (string, bool) {
+	if accept == "" {
+		return "png", true
+	}
+
+	formatByMediaType := map[string]string{
+		"image/png":  "png",
+		"image/jpeg": "jpeg",
+		"image/webp": "webp",
+		"image/gif":  "gif",
+		"image/heic": "heic",
+	}
+
+	bestFormat := ""
+	bestQ := 0.0
+	for _, part := range strings.Split(accept, ",") {
+		mediaType, params, err := mime.ParseMediaType(strings.TrimSpace(part))
+		if err != nil {
+			continue
+		}
+
+		format := formatByMediaType[mediaType]
+		if format == "" && (mediaType == "image/*" || mediaType == "*/*") {
+			format = "png"
+		}
+		if format == "" {
+			continue
+		}
+
+		q := 1.0
+		if rawQ := params["q"]; rawQ != "" {
+			parsed, err := strconv.ParseFloat(rawQ, 64)
+			if err != nil {
+				continue
+			}
+			q = parsed
+		}
+		if q <= 0 {
+			continue
+		}
+		if q > bestQ {
+			bestQ = q
+			bestFormat = format
+		}
+	}
+	if bestFormat != "" {
+		return bestFormat, true
+	}
+	return "", false
 }
 
 func imageResponse(format string) *GetImageResponse {

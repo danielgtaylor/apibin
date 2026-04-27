@@ -171,7 +171,7 @@ func (s *APIServer) RegisterGetBook(api huma.API) {
 
 		resp := &GetBookResponse{
 			CacheControl: "max-age:0",
-			ETag:         b.Version(),
+			ETag:         quoteETag(b.Version()),
 			LastModified: b.modified,
 			Vary:         "Accept, Accept-Encoding, Origin",
 			Body:         b,

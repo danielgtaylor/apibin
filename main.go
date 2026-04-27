@@ -160,13 +160,83 @@ type StatusResponse struct {
 	XRetryIn   string `header:"X-Retry-In"`
 }
 
+func stringHeader() *huma.Param {
+	return &huma.Param{Schema: &huma.Schema{Type: "string"}}
+}
+
+func errorResponse() *huma.Response {
+	return &huma.Response{
+		Description: "Error",
+		Content: map[string]*huma.MediaType{
+			"application/problem+json": {
+				Schema: &huma.Schema{Ref: "#/components/schemas/ErrorModel"},
+			},
+		},
+	}
+}
+
+func statusText(code int) string {
+	if text := http.StatusText(code); text != "" {
+		return text
+	}
+	return fmt.Sprintf("Status %d", code)
+}
+
+func statusFixtureResponses() map[string]*huma.Response {
+	responses := map[string]*huma.Response{
+		"default": errorResponse(),
+	}
+	for code := 100; code <= 599; code++ {
+		responses[fmt.Sprintf("%d", code)] = &huma.Response{
+			Description: statusText(code),
+			Headers: map[string]*huma.Param{
+				"Retry-After": stringHeader(),
+				"X-Retry-In":  stringHeader(),
+			},
+		}
+	}
+	return responses
+}
+
+func redirectResponses(codes ...int) map[string]*huma.Response {
+	responses := map[string]*huma.Response{
+		"default": errorResponse(),
+	}
+	for _, code := range codes {
+		responses[fmt.Sprintf("%d", code)] = &huma.Response{
+			Description: statusText(code),
+			Headers: map[string]*huma.Param{
+				"Location": stringHeader(),
+			},
+		}
+	}
+	return responses
+}
+
+func redirectRangeResponses() map[string]*huma.Response {
+	responses := map[string]*huma.Response{
+		"default": errorResponse(),
+	}
+	for code := 300; code <= 399; code++ {
+		responses[fmt.Sprintf("%d", code)] = &huma.Response{
+			Description: statusText(code),
+			Headers: map[string]*huma.Param{
+				"Location": stringHeader(),
+			},
+		}
+	}
+	return responses
+}
+
 func (s *APIServer) RegisterStatus(api huma.API) {
 	huma.Register(api, huma.Operation{
-		OperationID: "get-status",
-		Method:      http.MethodGet,
-		Path:        "/status/{code}",
-		Description: "Status code example",
-		Tags:        []string{"Status"},
+		OperationID:   "get-status",
+		Method:        http.MethodGet,
+		Path:          "/status/{code}",
+		Description:   "Status code example",
+		Tags:          []string{"Status"},
+		DefaultStatus: http.StatusOK,
+		Responses:     statusFixtureResponses(),
 	}, func(ctx context.Context, input *struct {
 		Code       int    `path:"code" minimum:"100" maximum:"599" doc:"Status code to return"`
 		RetryAfter string `query:"retry-after" doc:"Retry-After header value"`
