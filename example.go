@@ -131,7 +131,7 @@ func (s *APIServer) RegisterExample(api huma.API) {
 		Tags:        []string{"Example"},
 	}, func(ctx context.Context, i *struct{}) (*ExampleResponse, error) {
 		return &ExampleResponse{
-			ETag: exampleEtag,
+			ETag: quoteETag(exampleEtag),
 			Body: example,
 		}, nil
 	})

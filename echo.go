@@ -6,6 +6,7 @@ import (
 	"encoding/binary"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -48,6 +49,10 @@ func genETagBytes(b []byte) string {
 	sum := make([]byte, 8)
 	binary.BigEndian.PutUint64(sum, hash)
 	return base64.RawURLEncoding.EncodeToString(sum)
+}
+
+func quoteETag(tag string) string {
+	return strconv.Quote(tag)
 }
 
 type EchoResponse struct {
@@ -119,7 +124,7 @@ func (s *APIServer) echoHandler(ctx context.Context, input *struct {
 	resp.CacheControl = "no-store"
 	resp.Vary = "*"
 	resp.LastModified = lastModified
-	resp.ETag = etag
+	resp.ETag = quoteETag(etag)
 
 	return resp, nil
 }

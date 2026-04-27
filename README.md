@@ -12,10 +12,14 @@ Provides a simple, modern, example API for demoing or debugging various features
 - Conditional requests via `ETag` or `LastModified`
 - Echo back request info to help debugging
 - Cached responses to test proxy & client-side caching
+- Auth, form, multipart upload, redirect, retry, timeout, cookie, and header fixtures
 - Example structured data
   - Shows off `object`, `array`, `string`, `date`, `binary`, `integer`, `number`, `boolean`, etc.
 - A sample CRUD API for books & reviews with simulated server-side updates
+- A resettable sample CRUD API for docs-oriented item examples
 - Image responses `JPEG`, `WEBP`, `GIF`, `PNG` & `HEIC`
+- [Server-Sent Events](https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events) and NDJSON streaming with JSON events
+- Byte streams, range requests, explicit compression fixtures, and content negotiation examples
 - [RFC7807](https://datatracker.ietf.org/doc/html/rfc7807) structured errors
 
 This project is open source: https://github.com/danielgtaylor/apibin

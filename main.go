@@ -31,10 +31,14 @@ Provides a simple, modern, example API that offers these features:
 - Conditional requests via ^ETag^ or ^LastModified^
 - Echo back request info to help debugging
 - Cached responses to test proxy & client-side caching
+- Auth, form, multipart upload, redirect, retry, timeout, cookie, and header fixtures
 - Example structured data
 	- Shows off ^object^, ^array^, ^string^, ^date^, ^binary^, ^integer^, ^number^, ^boolean^, etc.
 - A sample CRUD API for books & reviews with simulated server-side updates
+- A resettable sample CRUD API for docs-oriented item examples
 - Image responses ^JPEG^, ^WEBP^, ^GIF^, ^PNG^ & ^HEIC^
+- [Server-Sent Events](https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events) and NDJSON streaming with JSON events
+- Byte streams, range requests, explicit compression fixtures, and content negotiation examples
 - [RFC7807](https://datatracker.ietf.org/doc/html/rfc7807) structured errors
 
 This project is open source: [https://github.com/danielgtaylor/apibin](https://github.com/danielgtaylor/apibin)
@@ -156,13 +160,83 @@ type StatusResponse struct {
 	XRetryIn   string `header:"X-Retry-In"`
 }
 
+func stringHeader() *huma.Param {
+	return &huma.Param{Schema: &huma.Schema{Type: "string"}}
+}
+
+func errorResponse() *huma.Response {
+	return &huma.Response{
+		Description: "Error",
+		Content: map[string]*huma.MediaType{
+			"application/problem+json": {
+				Schema: &huma.Schema{Ref: "#/components/schemas/ErrorModel"},
+			},
+		},
+	}
+}
+
+func statusText(code int) string {
+	if text := http.StatusText(code); text != "" {
+		return text
+	}
+	return fmt.Sprintf("Status %d", code)
+}
+
+func statusFixtureResponses() map[string]*huma.Response {
+	responses := map[string]*huma.Response{
+		"default": errorResponse(),
+	}
+	for code := 100; code <= 599; code++ {
+		responses[fmt.Sprintf("%d", code)] = &huma.Response{
+			Description: statusText(code),
+			Headers: map[string]*huma.Param{
+				"Retry-After": stringHeader(),
+				"X-Retry-In":  stringHeader(),
+			},
+		}
+	}
+	return responses
+}
+
+func redirectResponses(codes ...int) map[string]*huma.Response {
+	responses := map[string]*huma.Response{
+		"default": errorResponse(),
+	}
+	for _, code := range codes {
+		responses[fmt.Sprintf("%d", code)] = &huma.Response{
+			Description: statusText(code),
+			Headers: map[string]*huma.Param{
+				"Location": stringHeader(),
+			},
+		}
+	}
+	return responses
+}
+
+func redirectRangeResponses() map[string]*huma.Response {
+	responses := map[string]*huma.Response{
+		"default": errorResponse(),
+	}
+	for code := 300; code <= 399; code++ {
+		responses[fmt.Sprintf("%d", code)] = &huma.Response{
+			Description: statusText(code),
+			Headers: map[string]*huma.Param{
+				"Location": stringHeader(),
+			},
+		}
+	}
+	return responses
+}
+
 func (s *APIServer) RegisterStatus(api huma.API) {
 	huma.Register(api, huma.Operation{
-		OperationID: "get-status",
-		Method:      http.MethodGet,
-		Path:        "/status/{code}",
-		Description: "Status code example",
-		Tags:        []string{"Status"},
+		OperationID:   "get-status",
+		Method:        http.MethodGet,
+		Path:          "/status/{code}",
+		Description:   "Status code example",
+		Tags:          []string{"Status"},
+		DefaultStatus: http.StatusOK,
+		Responses:     statusFixtureResponses(),
 	}, func(ctx context.Context, input *struct {
 		Code       int    `path:"code" minimum:"100" maximum:"599" doc:"Status code to return"`
 		RetryAfter string `query:"retry-after" doc:"Retry-After header value"`
@@ -189,7 +263,11 @@ func (s *APIServer) RegisterListImages(api huma.API) {
 		Description: "List available images",
 		Tags:        []string{"Images"},
 	}, func(ctx context.Context, input *struct {
-		Cursor string `query:"cursor" doc:"Pagination cursor"`
+		Cursor  string `query:"cursor" doc:"Pagination cursor"`
+		Format  string `query:"format" enum:"jpeg,webp,gif,png,heic" doc:"Filter by image format"`
+		Search  string `query:"search" doc:"Case-insensitive search over image names"`
+		Limit   int    `query:"limit" minimum:"1" maximum:"5" doc:"Maximum number of images to return"`
+		PerPage int    `query:"per_page" minimum:"1" maximum:"5" doc:"Alias for limit"`
 	}) (*ListImagesResponse, error) {
 		// Return different pages based on the cursor.
 		resp := &ListImagesResponse{}
@@ -229,8 +307,29 @@ func (s *APIServer) RegisterListImages(api huma.API) {
 				},
 			}
 		}
+		resp.Body = filterImages(resp.Body, input.Format, input.Search, input.Limit, input.PerPage)
 		return resp, nil
 	})
+}
+
+func filterImages(images []ImageItem, format, search string, limit, perPage int) []ImageItem {
+	if perPage > 0 {
+		limit = perPage
+	}
+	filtered := make([]ImageItem, 0, len(images))
+	for _, image := range images {
+		if format != "" && image.Format != format {
+			continue
+		}
+		if search != "" && !strings.Contains(strings.ToLower(image.Name), strings.ToLower(search)) {
+			continue
+		}
+		filtered = append(filtered, image)
+		if limit > 0 && len(filtered) >= limit {
+			break
+		}
+	}
+	return filtered
 }
 
 type GetImageResponse struct {
@@ -248,23 +347,7 @@ func (s *APIServer) RegisterGetImage(api huma.API) {
 	}, func(ctx context.Context, i *struct {
 		Type string `path:"type" enum:"jpeg,webp,png,gif,heic"`
 	}) (*GetImageResponse, error) {
-		var body []byte
-		switch i.Type {
-		case "jpeg":
-			body = exampleJPEG
-		case "webp":
-			body = exampleWEBP
-		case "png":
-			body = examplePNG
-		case "gif":
-			body = exampleGIF
-		case "heic":
-			body = exampleHeic
-		}
-		return &GetImageResponse{
-			ContentType: "image/" + i.Type,
-			Body:        body,
-		}, nil
+		return imageResponse(i.Type), nil
 	})
 }
 
@@ -330,7 +413,7 @@ func main() {
 			Addr:              fmt.Sprintf("%s:%d", opts.Host, opts.Port),
 			ReadTimeout:       5 * time.Second,
 			ReadHeaderTimeout: 1 * time.Second,
-			WriteTimeout:      10 * time.Second,
+			WriteTimeout:      5 * time.Minute, // Allow long-lived streams without disabling write deadlines globally
 			IdleTimeout:       30 * time.Second,
 			Handler:           router,
 		}
