@@ -487,19 +487,28 @@ func (s *APIServer) RegisterSlow(api huma.API) {
 
 func (s *APIServer) RegisterRequestFixtures(api huma.API) {
 	for _, route := range []struct {
-		Method string
-		Path   string
-		ID     string
+		Method     string
+		Path       string
+		ID         string
+		Parameters []*huma.Param
 	}{
-		{http.MethodGet, "/anything", "get-anything"},
-		{http.MethodGet, "/anything/{path}", "get-anything-path"},
-		{http.MethodGet, "/get", "get-method"},
-		{http.MethodPost, "/post", "post-method"},
-		{http.MethodPut, "/put", "put-method"},
-		{http.MethodPatch, "/patch", "patch-method"},
-		{http.MethodDelete, "/delete", "delete-method"},
-		{http.MethodHead, "/head", "head-method"},
-		{http.MethodOptions, "/options", "options-method"},
+		{Method: http.MethodGet, Path: "/anything", ID: "get-anything"},
+		{Method: http.MethodGet, Path: "/anything/{path}", ID: "get-anything-path", Parameters: []*huma.Param{
+			{
+				Name:        "path",
+				In:          "path",
+				Description: "Path suffix to echo",
+				Required:    true,
+				Schema:      &huma.Schema{Type: "string"},
+			},
+		}},
+		{Method: http.MethodGet, Path: "/get", ID: "get-method"},
+		{Method: http.MethodPost, Path: "/post", ID: "post-method"},
+		{Method: http.MethodPut, Path: "/put", ID: "put-method"},
+		{Method: http.MethodPatch, Path: "/patch", ID: "patch-method"},
+		{Method: http.MethodDelete, Path: "/delete", ID: "delete-method"},
+		{Method: http.MethodHead, Path: "/head", ID: "head-method"},
+		{Method: http.MethodOptions, Path: "/options", ID: "options-method"},
 	} {
 		huma.Register(api, huma.Operation{
 			OperationID: route.ID,
@@ -507,6 +516,7 @@ func (s *APIServer) RegisterRequestFixtures(api huma.API) {
 			Path:        route.Path,
 			Summary:     "Echo request data",
 			Tags:        []string{"Inspection"},
+			Parameters:  route.Parameters,
 		}, s.echoHandler)
 	}
 }

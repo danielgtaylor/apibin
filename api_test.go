@@ -25,6 +25,13 @@ import (
 func newTestAPI(t *testing.T) humatest.TestAPI {
 	t.Helper()
 
+	_, api := newTestHandler(t)
+	return humatest.Wrap(t, api)
+}
+
+func newTestHandler(t *testing.T) (http.Handler, huma.API) {
+	t.Helper()
+
 	config := huma.DefaultConfig("Test API", "1.0.0")
 	yamlFormat := huma.Format{
 		Marshal: func(writer io.Writer, v any) error {
@@ -38,14 +45,15 @@ func newTestAPI(t *testing.T) humatest.TestAPI {
 	config.Formats["yaml"] = yamlFormat
 
 	router := chi.NewMux()
+	router.Use(ResponseGuard)
 	router.Use(CORS)
 	router.Use(ContentEncoding)
-	api := humatest.Wrap(t, humachi.New(router, config))
+	api := humachi.New(router, config)
 
 	server := APIServer{}
 	huma.AutoRegister(api, &server)
 	autopatch.AutoPatch(api)
-	return api
+	return router, api
 }
 
 func assertStatus(t *testing.T, resp *httptest.ResponseRecorder, status int) {
@@ -552,6 +560,17 @@ func TestOpenAPIAndHelperCoverage(t *testing.T) {
 	if paths["/redirect/{n}"].Get.Responses["302"].Headers["Location"] == nil {
 		t.Fatal("OpenAPI should document redirect Location header")
 	}
+	anythingPath := paths["/anything/{path}"].Get
+	foundAnythingPathParam := false
+	for _, param := range anythingPath.Parameters {
+		if param.Name == "path" && param.In == "path" && param.Required {
+			foundAnythingPathParam = true
+			break
+		}
+	}
+	if !foundAnythingPathParam {
+		t.Fatal("OpenAPI should document the /anything/{path} path parameter")
+	}
 
 	for _, tt := range []struct {
 		spec   string
@@ -687,6 +706,103 @@ func TestContentEncodingMiddlewareStatusAndSmallBody(t *testing.T) {
 	}
 }
 
+func TestResponseGuardDiscardsNoBodyResponseWrites(t *testing.T) {
+	handler := ResponseGuard(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotModified)
+		if _, err := w.Write([]byte(`{"error":"not modified"}`)); err != nil {
+			t.Fatalf("Write returned error: %v", err)
+		}
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+
+	resp := &strictResponseWriter{header: http.Header{}, method: http.MethodGet}
+	req, _ := http.NewRequest(http.MethodGet, "/books/test", nil)
+	handler.ServeHTTP(resp, req)
+
+	if resp.status != http.StatusNotModified {
+		t.Fatalf("status = %d, want %d", resp.status, http.StatusNotModified)
+	}
+	if resp.body.Len() != 0 {
+		t.Fatalf("body length = %d, want 0", resp.body.Len())
+	}
+	if resp.duplicateHeaders != 0 {
+		t.Fatalf("duplicate WriteHeader calls = %d, want 0", resp.duplicateHeaders)
+	}
+}
+
+func TestConditionalNotModifiedDoesNotWriteBody(t *testing.T) {
+	handler, _ := newTestHandler(t)
+
+	first := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodGet, "/books/letters-from-an-astrophysicist", nil)
+	handler.ServeHTTP(first, req)
+	assertStatus(t, first, http.StatusOK)
+
+	resp := &strictResponseWriter{header: http.Header{}, method: http.MethodGet}
+	req, _ = http.NewRequest(http.MethodGet, "/books/letters-from-an-astrophysicist", nil)
+	req.Header.Set("If-None-Match", first.Header().Get("ETag"))
+
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			t.Fatalf("conditional 304 panicked: %v", recovered)
+		}
+	}()
+	handler.ServeHTTP(resp, req)
+
+	if resp.status != http.StatusNotModified {
+		t.Fatalf("status = %d, want %d; body: %s", resp.status, http.StatusNotModified, resp.body.String())
+	}
+	if resp.body.Len() != 0 {
+		t.Fatalf("304 body length = %d, want 0: %s", resp.body.Len(), resp.body.String())
+	}
+	if resp.duplicateHeaders != 0 {
+		t.Fatalf("duplicate WriteHeader calls = %d, want 0", resp.duplicateHeaders)
+	}
+}
+
+func TestHeadDoesNotWriteBody(t *testing.T) {
+	handler, _ := newTestHandler(t)
+
+	resp := &strictResponseWriter{header: http.Header{}, method: http.MethodHead}
+	req, _ := http.NewRequest(http.MethodHead, "/head", nil)
+
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			t.Fatalf("HEAD response panicked: %v", recovered)
+		}
+	}()
+	handler.ServeHTTP(resp, req)
+
+	if resp.status != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body: %s", resp.status, http.StatusOK, resp.body.String())
+	}
+	if resp.body.Len() != 0 {
+		t.Fatalf("HEAD body length = %d, want 0: %s", resp.body.Len(), resp.body.String())
+	}
+	if resp.duplicateHeaders != 0 {
+		t.Fatalf("duplicate WriteHeader calls = %d, want 0", resp.duplicateHeaders)
+	}
+}
+
+func TestRangePartialContentDoesNotDoubleWriteHeader(t *testing.T) {
+	handler, _ := newTestHandler(t)
+
+	resp := &strictResponseWriter{header: http.Header{}, method: http.MethodGet}
+	req, _ := http.NewRequest(http.MethodGet, "/range/100", nil)
+	req.Header.Set("Range", "bytes=0-9")
+	handler.ServeHTTP(resp, req)
+
+	if resp.status != http.StatusPartialContent {
+		t.Fatalf("status = %d, want %d; body: %s", resp.status, http.StatusPartialContent, resp.body.String())
+	}
+	if resp.body.Len() != 10 {
+		t.Fatalf("range body length = %d, want 10", resp.body.Len())
+	}
+	if resp.duplicateHeaders != 0 {
+		t.Fatalf("duplicate WriteHeader calls = %d, want 0", resp.duplicateHeaders)
+	}
+}
+
 func TestCORSMiddlewareActualRequest(t *testing.T) {
 	handler := CORS(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("ETag", `"abc"`)
@@ -746,6 +862,38 @@ func (w *testResponseWriter) Write(data []byte) (int, error) {
 
 func (w *testResponseWriter) WriteHeader(statusCode int) {
 	w.status = statusCode
+}
+
+type strictResponseWriter struct {
+	header           http.Header
+	body             bytes.Buffer
+	method           string
+	status           int
+	wrote            bool
+	duplicateHeaders int
+}
+
+func (w *strictResponseWriter) Header() http.Header {
+	return w.header
+}
+
+func (w *strictResponseWriter) Write(data []byte) (int, error) {
+	if !w.wrote {
+		w.WriteHeader(http.StatusOK)
+	}
+	if !bodyAllowed(w.method, w.status) {
+		return 0, http.ErrBodyNotAllowed
+	}
+	return w.body.Write(data)
+}
+
+func (w *strictResponseWriter) WriteHeader(statusCode int) {
+	if w.wrote {
+		w.duplicateHeaders++
+		return
+	}
+	w.status = statusCode
+	w.wrote = true
 }
 
 func gunzip(data []byte) ([]byte, error) {

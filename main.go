@@ -363,6 +363,7 @@ func main() {
 		router := chi.NewMux()
 
 		router.Use(middleware.Recoverer)
+		router.Use(ResponseGuard)
 		router.Use(CORS)
 		router.Use(ContentEncoding)
 
