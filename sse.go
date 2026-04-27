@@ -104,13 +104,16 @@ func (m *metricSimulator) next() MetricEvent {
 	}
 	m.rps = clamp(m.rps+rand.Float64()*60-30, 0, 2000)
 
+	region := regions[m.regionIdx%len(regions)]
+	m.regionIdx = (m.regionIdx + 1) % len(regions)
+
 	return MetricEvent{
 		Timestamp:      time.Now().UTC(),
 		CPUPercent:     math.Round(m.cpu*10) / 10,
 		MemoryPercent:  math.Round(m.mem*10) / 10,
 		ActiveConns:    m.conns,
 		RequestsPerSec: math.Round(m.rps*10) / 10,
-		Region:         regions[m.regionIdx%len(regions)],
+		Region:         region,
 	}
 }
 

@@ -586,8 +586,23 @@ func TestOpenAPIAndHelperCoverage(t *testing.T) {
 		}
 	}
 
-	if string(makeBytes(8, 42)) != string(makeBytes(8, 42)) {
+	left, err := makeBytes(8, 42)
+	if err != nil {
+		t.Fatal(err)
+	}
+	right, err := makeBytes(8, 42)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(left) != string(right) {
 		t.Fatal("seeded makeBytes should be deterministic")
+	}
+
+	sim := newMetricSimulator()
+	first := sim.next().Region
+	second := sim.next().Region
+	if first == second {
+		t.Fatalf("metric simulator should rotate regions, got %q twice", first)
 	}
 }
 

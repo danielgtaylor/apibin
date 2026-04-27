@@ -413,7 +413,7 @@ func main() {
 			Addr:              fmt.Sprintf("%s:%d", opts.Host, opts.Port),
 			ReadTimeout:       5 * time.Second,
 			ReadHeaderTimeout: 1 * time.Second,
-			WriteTimeout:      0, // SSE streams require no write deadline
+			WriteTimeout:      5 * time.Minute, // Allow long-lived streams without disabling write deadlines globally
 			IdleTimeout:       30 * time.Second,
 			Handler:           router,
 		}

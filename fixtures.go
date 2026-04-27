@@ -100,6 +100,7 @@ func (s *APIServer) RegisterUploads(api huma.API) {
 		if err != nil {
 			return nil, huma.Error400BadRequest("invalid multipart body")
 		}
+		defer form.RemoveAll()
 		resp := &UploadResponse{}
 		resp.Body.Fields = form.Value
 		for field, files := range form.File {
@@ -708,19 +709,23 @@ func (s *APIServer) RegisterBytes(api huma.API) {
 		N    int `path:"n" minimum:"1" maximum:"1048576"`
 		Seed int `query:"seed" doc:"Optional deterministic seed"`
 	}) (*BinaryResponse, error) {
-		return &BinaryResponse{ContentType: "application/octet-stream", Body: makeBytes(input.N, input.Seed)}, nil
+		data, err := makeBytes(input.N, input.Seed)
+		if err != nil {
+			return nil, err
+		}
+		return &BinaryResponse{ContentType: "application/octet-stream", Body: data}, nil
 	})
 }
 
-func makeBytes(n, seed int) []byte {
+func makeBytes(n, seed int) ([]byte, error) {
 	buf := make([]byte, n)
 	if seed != 0 {
 		r := mathrand.New(mathrand.NewSource(int64(seed)))
-		r.Read(buf)
-		return buf
+		_, err := r.Read(buf)
+		return buf, err
 	}
-	rand.Read(buf)
-	return buf
+	_, err := io.ReadFull(rand.Reader, buf)
+	return buf, err
 }
 
 func (s *APIServer) RegisterStreamBytes(api huma.API) {
@@ -737,7 +742,10 @@ func (s *APIServer) RegisterStreamBytes(api huma.API) {
 		Seed      int `query:"seed"`
 	}) (*struct{}, error) {
 		input.ctx.SetHeader("Content-Type", "application/octet-stream")
-		data := makeBytes(input.N, input.Seed)
+		data, err := makeBytes(input.N, input.Seed)
+		if err != nil {
+			return nil, err
+		}
 		for offset := 0; offset < len(data); offset += input.ChunkSize {
 			end := offset + input.ChunkSize
 			if end > len(data) {
@@ -762,7 +770,10 @@ func (s *APIServer) RegisterRange(api huma.API) {
 		RequestInfo
 		N int `path:"n" minimum:"1" maximum:"1048576"`
 	}) (*BinaryResponse, error) {
-		data := makeBytes(input.N, 1)
+		data, err := makeBytes(input.N, 1)
+		if err != nil {
+			return nil, err
+		}
 		if header := input.ctx.Header("Range"); strings.HasPrefix(header, "bytes=") {
 			start, end, ok := parseByteRange(strings.TrimPrefix(header, "bytes="), len(data))
 			if !ok {
