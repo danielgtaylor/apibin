@@ -213,15 +213,11 @@ func (s *APIServer) RegisterEvents(api huma.API) {
 	}, func(ctx context.Context, input *struct {
 		Count int `query:"count" minimum:"1" maximum:"100" default:"10" doc:"Number of events to emit"`
 	}, send sse.Sender) {
-		count := input.Count
-		if count == 0 {
-			count = 10
-		}
-		for i := 0; i < count; i++ {
+		for i := 0; i < input.Count; i++ {
 			if err := send.Data(docsEvent(i)); err != nil {
 				return
 			}
-			if i < count-1 {
+			if i < input.Count-1 {
 				select {
 				case <-ctx.Done():
 					return
@@ -243,17 +239,13 @@ func (s *APIServer) RegisterLogs(api huma.API) {
 		RequestInfo
 		Count int `query:"count" minimum:"1" maximum:"100" default:"10" doc:"Number of log lines to emit"`
 	}) (*struct{}, error) {
-		count := input.Count
-		if count == 0 {
-			count = 10
-		}
 		input.ctx.SetHeader("Content-Type", "application/x-ndjson")
 		enc := json.NewEncoder(input.ctx.BodyWriter())
-		for i := 0; i < count; i++ {
+		for i := 0; i < input.Count; i++ {
 			if err := enc.Encode(docsEvent(i)); err != nil {
 				return nil, err
 			}
-			if i < count-1 {
+			if i < input.Count-1 {
 				select {
 				case <-ctx.Done():
 					return nil, ctx.Err()

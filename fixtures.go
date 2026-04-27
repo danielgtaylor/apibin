@@ -183,8 +183,8 @@ func (s *APIServer) RegisterAuthBearer(api huma.API) {
 	}, func(ctx context.Context, input *struct {
 		RequestInfo
 	}) (*AuthResponse, error) {
-		token := strings.TrimPrefix(input.ctx.Header("Authorization"), "Bearer ")
-		if token == "" {
+		token, ok := strings.CutPrefix(input.ctx.Header("Authorization"), "Bearer ")
+		if !ok || token == "" {
 			return nil, huma.Error401Unauthorized("missing bearer token")
 		}
 		return authOK("bearer", token), nil
@@ -810,9 +810,15 @@ func (s *APIServer) RegisterDrip(api huma.API) {
 		if err != nil {
 			return nil, huma.Error400BadRequest("invalid delay")
 		}
+		if delay < 0 || delay > 10*time.Second {
+			return nil, huma.Error400BadRequest("delay must be between 0s and 10s")
+		}
 		duration, err := time.ParseDuration(input.Duration)
 		if err != nil {
 			return nil, huma.Error400BadRequest("invalid duration")
+		}
+		if duration < 0 || duration > 30*time.Second {
+			return nil, huma.Error400BadRequest("duration must be between 0s and 30s")
 		}
 		input.ctx.SetStatus(input.Code)
 		input.ctx.SetHeader("Content-Type", "application/octet-stream")

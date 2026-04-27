@@ -246,7 +246,7 @@ func filterImages(images []ImageItem, format, search string, limit, perPage int)
 	if perPage > 0 {
 		limit = perPage
 	}
-	filtered := images[:0]
+	filtered := make([]ImageItem, 0, len(images))
 	for _, image := range images {
 		if format != "" && image.Format != format {
 			continue
