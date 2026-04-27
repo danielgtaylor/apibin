@@ -21,7 +21,7 @@ const brotliEncoding = "br"
 
 var supportedEncodings []string = []string{brotliEncoding, gzipEncoding}
 var compressDenyList []string = []string{".gif", ".png", ".jpg", ".jpeg", ".zip", ".gz", ".bz2"}
-var compressDenyPaths []string = []string{"/sse/metrics"}
+var compressDenyPaths []string = []string{"/sse/metrics", "/events", "/logs", "/stream-bytes", "/drip"}
 
 type contentEncodingWriter struct {
 	http.ResponseWriter

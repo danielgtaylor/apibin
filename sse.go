@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"math"
 	"math/rand"
@@ -32,7 +33,38 @@ type AlertEvent struct {
 	Message   string    `json:"message" doc:"Human-readable alert description"`
 }
 
+// DocsUser identifies a user in docs-oriented stream examples.
+type DocsUser struct {
+	ID   string `json:"id" doc:"User ID"`
+	Name string `json:"name" doc:"Display name"`
+}
+
+// DocsEvent is a simple event shape for streaming documentation examples.
+type DocsEvent struct {
+	Type      string    `json:"type" enum:"login,update,logout" doc:"Event type"`
+	User      DocsUser  `json:"user" doc:"User associated with the event"`
+	Message   string    `json:"message" doc:"Human-readable message"`
+	Timestamp time.Time `json:"timestamp" doc:"Event timestamp"`
+}
+
 var regions = []string{"us-east-1", "us-west-2", "eu-west-1", "ap-southeast-1"}
+var docsEventTypes = []string{"login", "update", "logout"}
+var docsUsers = []DocsUser{
+	{ID: "u_123", Name: "Alice"},
+	{ID: "u_456", Name: "Sam"},
+	{ID: "u_789", Name: "Morgan"},
+}
+
+func docsEvent(i int) DocsEvent {
+	user := docsUsers[i%len(docsUsers)]
+	eventType := docsEventTypes[i%len(docsEventTypes)]
+	return DocsEvent{
+		Type:      eventType,
+		User:      user,
+		Message:   fmt.Sprintf("%s event for %s", eventType, user.Name),
+		Timestamp: time.Now().UTC(),
+	}
+}
 
 // metricSimulator holds running state so values drift realistically between samples.
 type metricSimulator struct {
@@ -165,5 +197,70 @@ func (s *APIServer) RegisterSSE(api huma.API) {
 				}
 			}
 		}
+	})
+}
+
+func (s *APIServer) RegisterEvents(api huma.API) {
+	sse.Register(api, huma.Operation{
+		OperationID: "get-events",
+		Method:      http.MethodGet,
+		Path:        "/events",
+		Summary:     "Stream simple docs events",
+		Description: "Streams a bounded Server-Sent Events feed with a simple `type`, `user.id`, `message`, and `timestamp` shape for documentation examples.",
+		Tags:        []string{"SSE"},
+	}, map[string]any{
+		"event": DocsEvent{},
+	}, func(ctx context.Context, input *struct {
+		Count int `query:"count" minimum:"1" maximum:"100" default:"10" doc:"Number of events to emit"`
+	}, send sse.Sender) {
+		count := input.Count
+		if count == 0 {
+			count = 10
+		}
+		for i := 0; i < count; i++ {
+			if err := send.Data(docsEvent(i)); err != nil {
+				return
+			}
+			if i < count-1 {
+				select {
+				case <-ctx.Done():
+					return
+				case <-time.After(250 * time.Millisecond):
+				}
+			}
+		}
+	})
+}
+
+func (s *APIServer) RegisterLogs(api huma.API) {
+	huma.Register(api, huma.Operation{
+		OperationID: "get-logs",
+		Method:      http.MethodGet,
+		Path:        "/logs",
+		Summary:     "Stream newline-delimited JSON logs",
+		Tags:        []string{"Streaming"},
+	}, func(ctx context.Context, input *struct {
+		RequestInfo
+		Count int `query:"count" minimum:"1" maximum:"100" default:"10" doc:"Number of log lines to emit"`
+	}) (*struct{}, error) {
+		count := input.Count
+		if count == 0 {
+			count = 10
+		}
+		input.ctx.SetHeader("Content-Type", "application/x-ndjson")
+		enc := json.NewEncoder(input.ctx.BodyWriter())
+		for i := 0; i < count; i++ {
+			if err := enc.Encode(docsEvent(i)); err != nil {
+				return nil, err
+			}
+			if i < count-1 {
+				select {
+				case <-ctx.Done():
+					return nil, ctx.Err()
+				case <-time.After(250 * time.Millisecond):
+				}
+			}
+		}
+		return nil, nil
 	})
 }

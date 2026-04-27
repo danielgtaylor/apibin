@@ -31,11 +31,14 @@ Provides a simple, modern, example API that offers these features:
 - Conditional requests via ^ETag^ or ^LastModified^
 - Echo back request info to help debugging
 - Cached responses to test proxy & client-side caching
+- Auth, form, multipart upload, redirect, retry, timeout, cookie, and header fixtures
 - Example structured data
 	- Shows off ^object^, ^array^, ^string^, ^date^, ^binary^, ^integer^, ^number^, ^boolean^, etc.
 - A sample CRUD API for books & reviews with simulated server-side updates
+- A resettable sample CRUD API for docs-oriented item examples
 - Image responses ^JPEG^, ^WEBP^, ^GIF^, ^PNG^ & ^HEIC^
-- [Server-Sent Events](https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events) streaming with JSON events
+- [Server-Sent Events](https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events) and NDJSON streaming with JSON events
+- Byte streams, range requests, explicit compression fixtures, and content negotiation examples
 - [RFC7807](https://datatracker.ietf.org/doc/html/rfc7807) structured errors
 
 This project is open source: [https://github.com/danielgtaylor/apibin](https://github.com/danielgtaylor/apibin)
@@ -190,7 +193,11 @@ func (s *APIServer) RegisterListImages(api huma.API) {
 		Description: "List available images",
 		Tags:        []string{"Images"},
 	}, func(ctx context.Context, input *struct {
-		Cursor string `query:"cursor" doc:"Pagination cursor"`
+		Cursor  string `query:"cursor" doc:"Pagination cursor"`
+		Format  string `query:"format" enum:"jpeg,webp,gif,png,heic" doc:"Filter by image format"`
+		Search  string `query:"search" doc:"Case-insensitive search over image names"`
+		Limit   int    `query:"limit" minimum:"1" maximum:"5" doc:"Maximum number of images to return"`
+		PerPage int    `query:"per_page" minimum:"1" maximum:"5" doc:"Alias for limit"`
 	}) (*ListImagesResponse, error) {
 		// Return different pages based on the cursor.
 		resp := &ListImagesResponse{}
@@ -230,8 +237,29 @@ func (s *APIServer) RegisterListImages(api huma.API) {
 				},
 			}
 		}
+		resp.Body = filterImages(resp.Body, input.Format, input.Search, input.Limit, input.PerPage)
 		return resp, nil
 	})
+}
+
+func filterImages(images []ImageItem, format, search string, limit, perPage int) []ImageItem {
+	if perPage > 0 {
+		limit = perPage
+	}
+	filtered := images[:0]
+	for _, image := range images {
+		if format != "" && image.Format != format {
+			continue
+		}
+		if search != "" && !strings.Contains(strings.ToLower(image.Name), strings.ToLower(search)) {
+			continue
+		}
+		filtered = append(filtered, image)
+		if limit > 0 && len(filtered) >= limit {
+			break
+		}
+	}
+	return filtered
 }
 
 type GetImageResponse struct {
@@ -249,23 +277,7 @@ func (s *APIServer) RegisterGetImage(api huma.API) {
 	}, func(ctx context.Context, i *struct {
 		Type string `path:"type" enum:"jpeg,webp,png,gif,heic"`
 	}) (*GetImageResponse, error) {
-		var body []byte
-		switch i.Type {
-		case "jpeg":
-			body = exampleJPEG
-		case "webp":
-			body = exampleWEBP
-		case "png":
-			body = examplePNG
-		case "gif":
-			body = exampleGIF
-		case "heic":
-			body = exampleHeic
-		}
-		return &GetImageResponse{
-			ContentType: "image/" + i.Type,
-			Body:        body,
-		}, nil
+		return imageResponse(i.Type), nil
 	})
 }
 
