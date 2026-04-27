@@ -38,6 +38,7 @@ func newTestAPI(t *testing.T) humatest.TestAPI {
 	config.Formats["yaml"] = yamlFormat
 
 	router := chi.NewMux()
+	router.Use(CORS)
 	router.Use(ContentEncoding)
 	api := humatest.Wrap(t, humachi.New(router, config))
 
@@ -684,6 +685,49 @@ func TestContentEncodingMiddlewareStatusAndSmallBody(t *testing.T) {
 	if resp.body.String() != "small" {
 		t.Fatalf("small body = %q", resp.body.String())
 	}
+}
+
+func TestCORSMiddlewareActualRequest(t *testing.T) {
+	handler := CORS(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("ETag", `"abc"`)
+		w.WriteHeader(http.StatusAccepted)
+	}))
+
+	req, _ := http.NewRequest(http.MethodGet, "/books", nil)
+	req.Header.Set("Origin", "https://docs.rest.sh")
+	resp := httptest.NewRecorder()
+	handler.ServeHTTP(resp, req)
+
+	assertStatus(t, resp, http.StatusAccepted)
+	assertHeader(t, resp, "Access-Control-Allow-Origin", "*")
+	assertHeader(t, resp, "Access-Control-Expose-Headers", "*")
+	assertHeader(t, resp, "ETag", `"abc"`)
+}
+
+func TestCORSMiddlewarePreflight(t *testing.T) {
+	called := false
+	handler := CORS(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		called = true
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	req, _ := http.NewRequest(http.MethodOptions, "/items", nil)
+	req.Header.Set("Origin", "https://docs.rest.sh")
+	req.Header.Set("Access-Control-Request-Method", http.MethodPatch)
+	req.Header.Set("Access-Control-Request-Headers", "content-type, x-api-key")
+	req.Header.Set("Access-Control-Request-Private-Network", "true")
+	resp := httptest.NewRecorder()
+	handler.ServeHTTP(resp, req)
+
+	assertStatus(t, resp, http.StatusNoContent)
+	if called {
+		t.Fatal("preflight request reached the next handler")
+	}
+	assertHeader(t, resp, "Access-Control-Allow-Origin", "*")
+	assertHeader(t, resp, "Access-Control-Allow-Methods", corsAllowMethods)
+	assertHeader(t, resp, "Access-Control-Allow-Headers", "content-type, x-api-key")
+	assertHeader(t, resp, "Access-Control-Allow-Private-Network", "true")
+	assertHeader(t, resp, "Access-Control-Max-Age", "86400")
 }
 
 type testResponseWriter struct {
