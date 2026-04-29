@@ -467,6 +467,37 @@ func TestStreamingEndpoints(t *testing.T) {
 	}
 }
 
+func TestLogsEndpointStreamsWithoutContentLength(t *testing.T) {
+	handler, _ := newTestHandler(t)
+	server := httptest.NewServer(handler)
+	defer server.Close()
+
+	resp, err := server.Client().Get(server.URL + "/logs?count=2")
+	if err != nil {
+		t.Fatalf("GET /logs failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("status = %d, want %d; body: %s", resp.StatusCode, http.StatusOK, body)
+	}
+	if got := resp.Header.Get("Content-Length"); got != "" {
+		t.Fatalf("Content-Length = %q, want empty for streaming response", got)
+	}
+	if resp.ContentLength != -1 {
+		t.Fatalf("ContentLength = %d, want -1 for streaming response", resp.ContentLength)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("read logs body: %v", err)
+	}
+	if !strings.Contains(string(body), `"type":"login"`) || !strings.Contains(string(body), `"type":"update"`) {
+		t.Fatalf("logs response mismatch: %s", body)
+	}
+}
+
 func TestErrorPathsAndFixtureVariants(t *testing.T) {
 	api := newTestAPI(t)
 

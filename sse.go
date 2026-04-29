@@ -238,24 +238,30 @@ func (s *APIServer) RegisterLogs(api huma.API) {
 		Path:        "/logs",
 		Summary:     "Stream newline-delimited JSON logs",
 		Tags:        []string{"Streaming"},
-	}, func(ctx context.Context, input *struct {
-		RequestInfo
+	}, func(_ context.Context, input *struct {
 		Count int `query:"count" minimum:"1" maximum:"100" default:"10" doc:"Number of log lines to emit"`
-	}) (*struct{}, error) {
-		input.ctx.SetHeader("Content-Type", "application/x-ndjson")
-		enc := json.NewEncoder(input.ctx.BodyWriter())
-		for i := 0; i < input.Count; i++ {
-			if err := enc.Encode(docsEvent(i)); err != nil {
-				return nil, err
-			}
-			if i < input.Count-1 {
-				select {
-				case <-ctx.Done():
-					return nil, ctx.Err()
-				case <-time.After(250 * time.Millisecond):
+	}) (*huma.StreamResponse, error) {
+		return &huma.StreamResponse{
+			Body: func(streamCtx huma.Context) {
+				streamCtx.SetHeader("Content-Type", "application/x-ndjson")
+				bw := streamCtx.BodyWriter()
+				enc := json.NewEncoder(bw)
+				for i := 0; i < input.Count; i++ {
+					if err := enc.Encode(docsEvent(i)); err != nil {
+						return
+					}
+					if f, ok := bw.(http.Flusher); ok {
+						f.Flush()
+					}
+					if i < input.Count-1 {
+						select {
+						case <-streamCtx.Context().Done():
+							return
+						case <-time.After(250 * time.Millisecond):
+						}
+					}
 				}
-			}
-		}
-		return nil, nil
+			},
+		}, nil
 	})
 }
