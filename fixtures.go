@@ -149,6 +149,11 @@ func addRestishCLIConfig(o *huma.OpenAPI) {
 		o.Extensions = map[string]any{}
 	}
 	o.Extensions["x-cli-config"] = map[string]any{
+		"security": "basicAuth",
+		"params": map[string]any{
+			"username": "docs",
+			"password": "docs",
+		},
 		"profiles": map[string]any{
 			"default": map[string]any{
 				"credentials": map[string]any{

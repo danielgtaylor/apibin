@@ -586,6 +586,13 @@ func TestOpenAPIAndHelperCoverage(t *testing.T) {
 	if !ok {
 		t.Fatal("OpenAPI should include Restish x-cli-config")
 	}
+	if xcli["security"] != "basicAuth" {
+		t.Fatalf("x-cli-config legacy security = %#v, want basicAuth", xcli["security"])
+	}
+	params, ok := xcli["params"].(map[string]any)
+	if !ok || params["username"] != "docs" || params["password"] != "docs" {
+		t.Fatalf("x-cli-config legacy params = %#v", xcli["params"])
+	}
 	profiles, ok := xcli["profiles"].(map[string]any)
 	if !ok {
 		t.Fatal("x-cli-config should include profiles")
