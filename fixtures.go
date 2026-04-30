@@ -144,6 +144,57 @@ func addAuthSchemes(api huma.API) {
 	o.Components.SecuritySchemes["apiKeyQuery"] = &huma.SecurityScheme{Type: "apiKey", In: "query", Name: "api_key"}
 }
 
+func addRestishCLIConfig(o *huma.OpenAPI) {
+	if o.Extensions == nil {
+		o.Extensions = map[string]any{}
+	}
+	o.Extensions["x-cli-config"] = map[string]any{
+		"profiles": map[string]any{
+			"default": map[string]any{
+				"credentials": map[string]any{
+					"basicAuth": map[string]any{
+						"auth": map[string]any{
+							"type": "http-basic",
+							"params": map[string]any{
+								"username": "docs",
+								"password": "docs",
+							},
+						},
+					},
+					"bearerAuth": map[string]any{
+						"auth": map[string]any{
+							"type": "bearer",
+							"params": map[string]any{
+								"token": "docs-token",
+							},
+						},
+					},
+					"apiKeyHeader": map[string]any{
+						"auth": map[string]any{
+							"type": "api-key",
+							"params": map[string]any{
+								"in":    "header",
+								"name":  "X-API-Key",
+								"value": "docs-key",
+							},
+						},
+					},
+					"apiKeyQuery": map[string]any{
+						"auth": map[string]any{
+							"type": "api-key",
+							"params": map[string]any{
+								"in":    "query",
+								"name":  "api_key",
+								"value": "docs-query-key",
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+}
+
 func authOK(scheme, subject string) *AuthResponse {
 	resp := &AuthResponse{}
 	resp.Body.Authenticated = true

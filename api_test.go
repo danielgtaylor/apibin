@@ -33,6 +33,7 @@ func newTestHandler(t *testing.T) (http.Handler, huma.API) {
 	t.Helper()
 
 	config := huma.DefaultConfig("Test API", "1.0.0")
+	addRestishCLIConfig(config.OpenAPI)
 	yamlFormat := huma.Format{
 		Marshal: func(writer io.Writer, v any) error {
 			return yaml.NewEncoder(writer).Encode(v)
@@ -581,6 +582,27 @@ func TestErrorPathsAndFixtureVariants(t *testing.T) {
 func TestOpenAPIAndHelperCoverage(t *testing.T) {
 	api := newTestAPI(t)
 	paths := api.OpenAPI().Paths
+	xcli, ok := api.OpenAPI().Extensions["x-cli-config"].(map[string]any)
+	if !ok {
+		t.Fatal("OpenAPI should include Restish x-cli-config")
+	}
+	profiles, ok := xcli["profiles"].(map[string]any)
+	if !ok {
+		t.Fatal("x-cli-config should include profiles")
+	}
+	defaultProfile, ok := profiles["default"].(map[string]any)
+	if !ok {
+		t.Fatal("x-cli-config should include default profile")
+	}
+	credentials, ok := defaultProfile["credentials"].(map[string]any)
+	if !ok {
+		t.Fatal("x-cli-config default profile should include credentials")
+	}
+	for _, id := range []string{"basicAuth", "bearerAuth", "apiKeyHeader", "apiKeyQuery"} {
+		if credentials[id] == nil {
+			t.Fatalf("x-cli-config missing credential %q", id)
+		}
+	}
 
 	if paths["/status/{code}"].Get.Responses["418"] == nil {
 		t.Fatal("OpenAPI should document dynamic /status/{code} responses")

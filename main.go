@@ -382,6 +382,7 @@ func main() {
 		config.Servers = []*huma.Server{
 			{URL: "https://api.rest.sh"},
 		}
+		addRestishCLIConfig(config.OpenAPI)
 
 		yamlFormat := huma.Format{
 			Marshal: func(writer io.Writer, v any) error {
