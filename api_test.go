@@ -48,6 +48,7 @@ func newTestHandler(t *testing.T) (http.Handler, huma.API) {
 	router := chi.NewMux()
 	router.Use(ResponseGuard)
 	router.Use(CORS)
+	router.Use(StreamingHeaders)
 	router.Use(ContentEncoding)
 	api := humachi.New(router, config)
 
@@ -465,6 +466,22 @@ func TestStreamingEndpoints(t *testing.T) {
 	assertHeader(t, resp, "Content-Type", "application/x-ndjson")
 	if !strings.Contains(resp.Body.String(), `"type":"login"`) {
 		t.Fatalf("logs response mismatch: %s", resp.Body.String())
+	}
+}
+
+func TestStreamingEndpointsDisableProxyBuffering(t *testing.T) {
+	api := newTestAPI(t)
+
+	for _, path := range []string{
+		"/sse/metrics?count=1",
+		"/events?count=1",
+		"/logs?count=1",
+	} {
+		resp := api.Get(path)
+		assertStatus(t, resp, http.StatusOK)
+		assertHeader(t, resp, "Cache-Control", "no-cache, no-store, no-transform")
+		assertHeader(t, resp, "Surrogate-Control", "no-store")
+		assertHeader(t, resp, "X-Accel-Buffering", "no")
 	}
 }
 
