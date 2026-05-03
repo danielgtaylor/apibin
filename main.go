@@ -365,6 +365,7 @@ func main() {
 		router.Use(middleware.Recoverer)
 		router.Use(ResponseGuard)
 		router.Use(CORS)
+		router.Use(StreamingHeaders)
 		router.Use(ContentEncoding)
 
 		router.Use(func(next http.Handler) http.Handler {
