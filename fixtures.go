@@ -30,9 +30,9 @@ import (
 
 type TokenResponse struct {
 	Body struct {
-		Token     string `json:"token"`
-		TokenType string `json:"token_type"`
-		User      string `json:"user"`
+		Token     string `json:"token" doc:"Mock bearer token for documentation examples" example:"docs-token-alice"`
+		TokenType string `json:"token_type" enum:"Bearer" doc:"Token type" example:"Bearer"`
+		User      string `json:"user" doc:"Username from the submitted form" example:"alice"`
 	}
 }
 
@@ -64,16 +64,16 @@ func (s *APIServer) RegisterLogin(api huma.API) {
 }
 
 type UploadFile struct {
-	Field       string `json:"field"`
-	Filename    string `json:"filename"`
-	ContentType string `json:"content_type,omitempty"`
-	Size        int64  `json:"size"`
+	Field       string `json:"field" doc:"Multipart field name" example:"avatar"`
+	Filename    string `json:"filename" doc:"Uploaded filename" example:"avatar.png"`
+	ContentType string `json:"content_type,omitempty" doc:"Detected file content type" example:"image/png"`
+	Size        int64  `json:"size" minimum:"0" doc:"File size in bytes" example:"2048"`
 }
 
 type UploadResponse struct {
 	Body struct {
-		Fields map[string][]string `json:"fields"`
-		Files  []UploadFile        `json:"files"`
+		Fields map[string][]string `json:"fields" doc:"Non-file multipart fields grouped by field name"`
+		Files  []UploadFile        `json:"files" doc:"Uploaded file metadata"`
 	}
 }
 
@@ -127,9 +127,9 @@ func (s *APIServer) RegisterUploads(api huma.API) {
 
 type AuthResponse struct {
 	Body struct {
-		Authenticated bool   `json:"authenticated"`
-		Scheme        string `json:"scheme"`
-		Subject       string `json:"subject,omitempty"`
+		Authenticated bool   `json:"authenticated" doc:"Whether the mock authentication check succeeded" example:"true"`
+		Scheme        string `json:"scheme" enum:"basic,bearer,api-key-header,api-key-query" doc:"Authentication scheme that accepted the request" example:"bearer"`
+		Subject       string `json:"subject,omitempty" doc:"Authenticated username, token, or API key" example:"docs-token"`
 	}
 }
 
@@ -278,7 +278,7 @@ func (s *APIServer) RegisterAuthAPIKeyQuery(api huma.API) {
 		Tags:        []string{"Auth"},
 		Security:    []map[string][]string{{"apiKeyQuery": {}}},
 	}, func(ctx context.Context, input *struct {
-		APIKey string `query:"api_key" doc:"API key"`
+		APIKey string `query:"api_key" doc:"API key" example:"docs-query-key"`
 	}) (*AuthResponse, error) {
 		if input.APIKey == "" {
 			return nil, huma.Error401Unauthorized("missing api_key")
@@ -300,11 +300,11 @@ func parseBasic(header string) (string, string, bool) {
 }
 
 type Item struct {
-	ID      string    `json:"id"`
-	Name    string    `json:"name"`
-	Enabled bool      `json:"enabled"`
-	Tags    []string  `json:"tags,omitempty"`
-	Updated time.Time `json:"updated"`
+	ID      string    `json:"id" maxLength:"64" doc:"Stable item identifier; omit or leave empty when creating an item to have one generated" example:"alpha"`
+	Name    string    `json:"name" minLength:"1" maxLength:"120" doc:"Display name" example:"Alpha item"`
+	Enabled bool      `json:"enabled" doc:"Whether the item is enabled" example:"true"`
+	Tags    []string  `json:"tags,omitempty" maxItems:"10" uniqueItems:"true" doc:"Free-form item tags" example:"[\"docs\",\"example\"]"`
+	Updated time.Time `json:"updated" doc:"Time when the item was last updated"`
 }
 
 type ItemsResponse struct {
@@ -366,7 +366,7 @@ func (s *APIServer) RegisterGetItem(api huma.API) {
 		Summary:     "Get a sample item",
 		Tags:        []string{"Items"},
 	}, func(ctx context.Context, input *struct {
-		ID string `path:"item-id"`
+		ID string `path:"item-id" doc:"Item identifier" example:"alpha"`
 	}) (*ItemResponse, error) {
 		itemsMu.RLock()
 		defer itemsMu.RUnlock()
@@ -411,7 +411,7 @@ func (s *APIServer) RegisterPatchItem(api huma.API) {
 		Summary:     "Patch a sample item",
 		Tags:        []string{"Items"},
 	}, func(ctx context.Context, input *struct {
-		ID   string `path:"item-id"`
+		ID   string `path:"item-id" doc:"Item identifier" example:"alpha"`
 		Body map[string]any
 	}) (*ItemResponse, error) {
 		itemsMu.Lock()
@@ -448,7 +448,7 @@ func (s *APIServer) RegisterDeleteItem(api huma.API) {
 		Summary:     "Delete a sample item",
 		Tags:        []string{"Items"},
 	}, func(ctx context.Context, input *struct {
-		ID string `path:"item-id"`
+		ID string `path:"item-id" doc:"Item identifier" example:"alpha"`
 	}) (*struct{}, error) {
 		itemsMu.Lock()
 		defer itemsMu.Unlock()
@@ -474,8 +474,8 @@ func (s *APIServer) RegisterFlaky(api huma.API) {
 		Summary:     "Fail a configurable number of times, then succeed",
 		Tags:        []string{"Reliability"},
 	}, func(ctx context.Context, input *struct {
-		Failures int    `query:"failures" default:"2" minimum:"0" maximum:"20"`
-		Key      string `query:"key" default:"default"`
+		Failures int    `query:"failures" default:"2" minimum:"0" maximum:"20" doc:"Number of failed attempts before returning success" example:"2"`
+		Key      string `query:"key" default:"default" doc:"Counter key used to isolate retry sequences" example:"docs-demo"`
 	}) (*struct {
 		Status int
 		Body   map[string]any
@@ -663,7 +663,7 @@ func (s *APIServer) RegisterRedirects(api huma.API) {
 			Responses:     redirectResponses(http.StatusFound),
 		}, func(ctx context.Context, input *struct {
 			RequestInfo
-			N int `path:"n" minimum:"1" maximum:"20"`
+			N int `path:"n" minimum:"1" maximum:"20" doc:"Number of redirects to follow before reaching /get" example:"3"`
 		}) (*struct{ Status int }, error) {
 			n := input.N - 1
 			next := "/get"
@@ -692,8 +692,8 @@ func (s *APIServer) RegisterRedirects(api huma.API) {
 		Responses:     redirectRangeResponses(),
 	}, func(ctx context.Context, input *struct {
 		RequestInfo
-		URL        string `query:"url" required:"true"`
-		StatusCode int    `query:"status_code" default:"302" minimum:"300" maximum:"399"`
+		URL        string `query:"url" required:"true" format:"uri" doc:"Absolute or relative redirect target" example:"https://example.com/next"`
+		StatusCode int    `query:"status_code" default:"302" minimum:"300" maximum:"399" doc:"3xx redirect status code to send" example:"307"`
 	}) (*struct{ Status int }, error) {
 		input.ctx.SetHeader("Location", input.URL)
 		return &struct{ Status int }{Status: input.StatusCode}, nil
@@ -717,7 +717,7 @@ func (s *APIServer) RegisterETagFixture(api huma.API) {
 		Tags:        []string{"Caching"},
 	}, func(ctx context.Context, input *struct {
 		RequestInfo
-		ETag string `path:"etag"`
+		ETag string `path:"etag" doc:"Opaque ETag value to return" example:"docs-cache"`
 	}) (*struct{}, error) {
 		etag := `"` + input.ETag + `"`
 		input.ctx.SetHeader("ETag", etag)
@@ -772,8 +772,8 @@ func (s *APIServer) RegisterBytes(api huma.API) {
 		Summary:     "Return random bytes",
 		Tags:        []string{"Binary"},
 	}, func(ctx context.Context, input *struct {
-		N    int `path:"n" minimum:"1" maximum:"1048576"`
-		Seed int `query:"seed" doc:"Optional deterministic seed"`
+		N    int `path:"n" minimum:"1" maximum:"1048576" doc:"Number of bytes to return" example:"1024"`
+		Seed int `query:"seed" doc:"Optional deterministic seed" example:"42"`
 	}) (*BinaryResponse, error) {
 		data, err := makeBytes(input.N, input.Seed)
 		if err != nil {
@@ -803,9 +803,9 @@ func (s *APIServer) RegisterStreamBytes(api huma.API) {
 		Tags:        []string{"Binary"},
 	}, func(ctx context.Context, input *struct {
 		RequestInfo
-		N         int `path:"n" minimum:"1" maximum:"1048576"`
-		ChunkSize int `query:"chunk_size" default:"1024" minimum:"1" maximum:"65536"`
-		Seed      int `query:"seed"`
+		N         int `path:"n" minimum:"1" maximum:"1048576" doc:"Total number of bytes to stream" example:"4096"`
+		ChunkSize int `query:"chunk_size" default:"1024" minimum:"1" maximum:"65536" doc:"Maximum bytes written per chunk" example:"1024"`
+		Seed      int `query:"seed" doc:"Optional deterministic seed" example:"42"`
 	}) (*struct{}, error) {
 		input.ctx.SetHeader("Content-Type", "application/octet-stream")
 		data, err := makeBytes(input.N, input.Seed)
@@ -834,7 +834,7 @@ func (s *APIServer) RegisterRange(api huma.API) {
 		Tags:        []string{"Binary"},
 	}, func(ctx context.Context, input *struct {
 		RequestInfo
-		N int `path:"n" minimum:"1" maximum:"1048576"`
+		N int `path:"n" minimum:"1" maximum:"1048576" doc:"Number of bytes in the virtual resource" example:"1024"`
 	}) (*BinaryResponse, error) {
 		data, err := makeBytes(input.N, 1)
 		if err != nil {
@@ -882,10 +882,10 @@ func (s *APIServer) RegisterDrip(api huma.API) {
 		Tags:        []string{"Binary"},
 	}, func(ctx context.Context, input *struct {
 		RequestInfo
-		NumBytes int    `query:"numbytes" default:"10" minimum:"1" maximum:"10000"`
-		Duration string `query:"duration" default:"2s"`
-		Delay    string `query:"delay" default:"0s"`
-		Code     int    `query:"code" default:"200" minimum:"100" maximum:"599"`
+		NumBytes int    `query:"numbytes" default:"10" minimum:"1" maximum:"10000" doc:"Number of bytes to stream" example:"10"`
+		Duration string `query:"duration" default:"2s" doc:"Total duration over which bytes are emitted" example:"2s"`
+		Delay    string `query:"delay" default:"0s" doc:"Delay before streaming begins" example:"500ms"`
+		Code     int    `query:"code" default:"200" minimum:"100" maximum:"599" doc:"HTTP status code to return" example:"200"`
 	}) (*struct{}, error) {
 		delay, err := time.ParseDuration(input.Delay)
 		if err != nil {
@@ -1030,7 +1030,7 @@ func (s *APIServer) RegisterFormats(api huma.API) {
 		Summary:     "Return data using a specific media type",
 		Tags:        []string{"Content"},
 	}, func(ctx context.Context, input *struct {
-		Format string `path:"format" enum:"json,yaml,cbor,vendor-json"`
+		Format string `path:"format" enum:"json,yaml,cbor,vendor-json" doc:"Response format to encode" example:"json"`
 	}) (*struct {
 		ContentType string `header:"Content-Type"`
 		Body        []byte
