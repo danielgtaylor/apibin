@@ -642,6 +642,16 @@ func TestOpenAPIAndHelperCoverage(t *testing.T) {
 	if paths["/redirect-to"].Get.Responses["307"] == nil || paths["/redirect-to"].Get.Responses["399"] == nil {
 		t.Fatal("OpenAPI should document redirect-to status range")
 	}
+	foundRedirectURLParam := false
+	for _, param := range paths["/redirect-to"].Get.Parameters {
+		if param.Name == "url" && param.In == "query" && param.Schema != nil && param.Schema.Format == "uri-reference" && param.Example == "/get" {
+			foundRedirectURLParam = true
+			break
+		}
+	}
+	if !foundRedirectURLParam {
+		t.Fatal("OpenAPI should document redirect-to URL as a URI reference")
+	}
 	if paths["/redirect/{n}"].Get.Responses["302"].Headers["Location"] == nil {
 		t.Fatal("OpenAPI should document redirect Location header")
 	}
@@ -755,6 +765,10 @@ func TestOpenAPISchemaMetadata(t *testing.T) {
 	metrics := schemaFor(t, schemas, "MetricEvent")
 	assertEnum(t, propertyFor(t, metrics, "region"), []any{"us-east-1", "us-west-2", "eu-west-1", "ap-southeast-1"})
 	assertFloatPtr(t, propertyFor(t, metrics, "requests_per_second").Maximum, 2000, "MetricEvent.requests_per_second maximum")
+
+	alert := schemaFor(t, schemas, "AlertEvent")
+	assertExample(t, propertyFor(t, alert, "severity"), "critical")
+	assertExample(t, propertyFor(t, alert, "message"), "cpu_percent is critically high at 82.3% (threshold: 80%)")
 }
 
 func schemaFor(t *testing.T, schemas map[string]*huma.Schema, name string) *huma.Schema {

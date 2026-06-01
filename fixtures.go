@@ -692,7 +692,7 @@ func (s *APIServer) RegisterRedirects(api huma.API) {
 		Responses:     redirectRangeResponses(),
 	}, func(ctx context.Context, input *struct {
 		RequestInfo
-		URL        string `query:"url" required:"true" format:"uri" doc:"Absolute or relative redirect target" example:"https://example.com/next"`
+		URL        string `query:"url" required:"true" format:"uri-reference" doc:"Absolute or relative redirect target" example:"/get"`
 		StatusCode int    `query:"status_code" default:"302" minimum:"300" maximum:"399" doc:"3xx redirect status code to send" example:"307"`
 	}) (*struct{ Status int }, error) {
 		input.ctx.SetHeader("Location", input.URL)

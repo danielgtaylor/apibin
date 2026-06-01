@@ -26,7 +26,7 @@ type MetricEvent struct {
 // AlertEvent is emitted when a metric crosses a warning or critical threshold.
 type AlertEvent struct {
 	Timestamp time.Time `json:"timestamp" doc:"Time the alert was raised"`
-	Severity  string    `json:"severity" enum:"warning,critical" doc:"Alert severity level" example:"warning"`
+	Severity  string    `json:"severity" enum:"warning,critical" doc:"Alert severity level" example:"critical"`
 	Metric    string    `json:"metric" enum:"cpu_percent,memory_percent" doc:"Name of the metric that triggered the alert" example:"cpu_percent"`
 	Value     float64   `json:"value" minimum:"0" doc:"Current value of the metric" example:"82.3"`
 	Threshold float64   `json:"threshold" minimum:"0" doc:"Threshold that was exceeded" example:"80"`
