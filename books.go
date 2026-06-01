@@ -19,18 +19,18 @@ import (
 
 // Rating is a point-in-time rating for a book.
 type Rating struct {
-	Date   time.Time `json:"date"`
-	Rating float64   `json:"rating"`
+	Date   time.Time `json:"date" doc:"Time when the rating was recorded"`
+	Rating float64   `json:"rating" minimum:"0" maximum:"5" multipleOf:"0.1" doc:"Rating value on a 0 to 5 scale" example:"4.6"`
 }
 
 // Book tracks metadata information about a book and its ratings.
 type Book struct {
-	Title         string    `json:"title"`
-	Author        string    `json:"author,omitempty"`
-	Published     time.Time `json:"published,omitempty"`
-	Ratings       int       `json:"ratings,omitempty"`
-	RatingAverage float64   `json:"rating_average,omitempty"`
-	RecentRatings []Rating  `json:"recent_ratings,omitempty"`
+	Title         string    `json:"title" minLength:"1" maxLength:"200" doc:"Book title" example:"The Left Hand of Darkness"`
+	Author        string    `json:"author,omitempty" minLength:"1" maxLength:"120" doc:"Primary author" example:"Ursula K. Le Guin"`
+	Published     time.Time `json:"published,omitempty" doc:"Publication date"`
+	Ratings       int       `json:"ratings,omitempty" minimum:"0" doc:"Total number of ratings" example:"1287"`
+	RatingAverage float64   `json:"rating_average,omitempty" minimum:"0" maximum:"5" multipleOf:"0.1" doc:"Average rating on a 0 to 5 scale" example:"4.4"`
+	RecentRatings []Rating  `json:"recent_ratings,omitempty" maxItems:"10" doc:"Most recent rating samples"`
 	modified      time.Time `json:"-"`
 }
 
@@ -47,9 +47,9 @@ func (b Book) Version() string {
 
 // BookSummary provides a link and version for the books list response.
 type BookSummary struct {
-	URL      string    `json:"url"`
-	Version  string    `json:"version"`
-	Modified time.Time `json:"modified"`
+	URL      string    `json:"url" format:"uri-reference" doc:"Relative URL for the book resource" example:"/books/left-hand-of-darkness"`
+	Version  string    `json:"version" doc:"Opaque version token for conditional requests" example:"F5D3XF8rF2F="`
+	Modified time.Time `json:"modified" doc:"Last modification time used for conditional requests"`
 }
 
 // booksMu controls access to the map/slice. This is necessary because maps &
@@ -155,7 +155,7 @@ func (s *APIServer) RegisterGetBook(api huma.API) {
 		Tags:        []string{"Books"},
 	}, func(ctx context.Context, input *struct {
 		conditional.Params
-		ID string `path:"book-id"`
+		ID string `path:"book-id" doc:"Book identifier" example:"sapiens"`
 	}) (*GetBookResponse, error) {
 		booksMu.RLock()
 		defer booksMu.RUnlock()
@@ -188,7 +188,7 @@ func (s *APIServer) RegisterPutBook(api huma.API) {
 		Tags:        []string{"Books"},
 	}, func(ctx context.Context, input *struct {
 		conditional.Params
-		ID   string `path:"book-id"`
+		ID   string `path:"book-id" doc:"Book identifier" example:"sapiens"`
 		Body Book
 	}) (*struct{}, error) {
 		booksMu.Lock()
@@ -228,7 +228,7 @@ func (s *APIServer) RegisterDeleteBook(api huma.API) {
 		Tags:        []string{"Books"},
 	}, func(ctx context.Context, input *struct {
 		conditional.Params
-		ID string `path:"book-id"`
+		ID string `path:"book-id" doc:"Book identifier" example:"sapiens"`
 	}) (*struct{}, error) {
 		booksMu.Lock()
 		defer booksMu.Unlock()

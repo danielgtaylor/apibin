@@ -16,34 +16,34 @@ import (
 // MetricEvent represents a snapshot of simulated server metrics.
 type MetricEvent struct {
 	Timestamp      time.Time `json:"timestamp" doc:"Time the metrics were sampled"`
-	CPUPercent     float64   `json:"cpu_percent" doc:"CPU utilization percentage" minimum:"0" maximum:"100"`
-	MemoryPercent  float64   `json:"memory_percent" doc:"Memory utilization percentage" minimum:"0" maximum:"100"`
-	ActiveConns    int       `json:"active_connections" doc:"Number of active HTTP connections"`
-	RequestsPerSec float64   `json:"requests_per_second" doc:"Inbound request rate"`
-	Region         string    `json:"region" doc:"Data center region reporting metrics"`
+	CPUPercent     float64   `json:"cpu_percent" doc:"CPU utilization percentage" minimum:"0" maximum:"100" example:"62.4"`
+	MemoryPercent  float64   `json:"memory_percent" doc:"Memory utilization percentage" minimum:"0" maximum:"100" example:"71.2"`
+	ActiveConns    int       `json:"active_connections" minimum:"0" doc:"Number of active HTTP connections" example:"96"`
+	RequestsPerSec float64   `json:"requests_per_second" minimum:"0" maximum:"2000" doc:"Inbound request rate" example:"421.5"`
+	Region         string    `json:"region" enum:"us-east-1,us-west-2,eu-west-1,ap-southeast-1" doc:"Data center region reporting metrics" example:"us-west-2"`
 }
 
 // AlertEvent is emitted when a metric crosses a warning or critical threshold.
 type AlertEvent struct {
 	Timestamp time.Time `json:"timestamp" doc:"Time the alert was raised"`
-	Severity  string    `json:"severity" enum:"warning,critical" doc:"Alert severity level"`
-	Metric    string    `json:"metric" doc:"Name of the metric that triggered the alert"`
-	Value     float64   `json:"value" doc:"Current value of the metric"`
-	Threshold float64   `json:"threshold" doc:"Threshold that was exceeded"`
-	Message   string    `json:"message" doc:"Human-readable alert description"`
+	Severity  string    `json:"severity" enum:"warning,critical" doc:"Alert severity level" example:"critical"`
+	Metric    string    `json:"metric" enum:"cpu_percent,memory_percent" doc:"Name of the metric that triggered the alert" example:"cpu_percent"`
+	Value     float64   `json:"value" minimum:"0" doc:"Current value of the metric" example:"82.3"`
+	Threshold float64   `json:"threshold" minimum:"0" doc:"Threshold that was exceeded" example:"80"`
+	Message   string    `json:"message" doc:"Human-readable alert description" example:"cpu_percent is critically high at 82.3% (threshold: 80%)"`
 }
 
 // DocsUser identifies a user in docs-oriented stream examples.
 type DocsUser struct {
-	ID   string `json:"id" doc:"User ID"`
-	Name string `json:"name" doc:"Display name"`
+	ID   string `json:"id" minLength:"1" doc:"User ID" example:"u_123"`
+	Name string `json:"name" minLength:"1" doc:"Display name" example:"Alice"`
 }
 
 // DocsEvent is a simple event shape for streaming documentation examples.
 type DocsEvent struct {
-	Type      string    `json:"type" enum:"login,update,logout" doc:"Event type"`
+	Type      string    `json:"type" enum:"login,update,logout" doc:"Event type" example:"login"`
 	User      DocsUser  `json:"user" doc:"User associated with the event"`
-	Message   string    `json:"message" doc:"Human-readable message"`
+	Message   string    `json:"message" doc:"Human-readable message" example:"login event for Alice"`
 	Timestamp time.Time `json:"timestamp" doc:"Event timestamp"`
 }
 

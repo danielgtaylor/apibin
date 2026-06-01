@@ -60,27 +60,27 @@ type CachedModel struct {
 }
 
 type ImageItem struct {
-	Name   string `json:"name"`
-	Format string `json:"format" enum:"jpeg,webp,gif,png,heic"`
-	Self   string `json:"self" format:"uri-reference"`
+	Name   string `json:"name" doc:"Human-readable image fixture name" example:"Dragonfly"`
+	Format string `json:"format" enum:"jpeg,webp,gif,png,heic" doc:"Image format returned by the fixture" example:"jpeg"`
+	Self   string `json:"self" format:"uri-reference" doc:"Relative URL for this image fixture" example:"/image/jpeg"`
 }
 
 type SubObject struct {
-	Binary     []byte    `json:"binary"`
-	BinaryLong []byte    `json:"binary_long"`
-	Date       time.Time `json:"date"`
-	DateTime   time.Time `json:"date_time"`
-	URL        string    `json:"url" format:"uri"`
+	Binary     []byte    `json:"binary" doc:"Small binary payload encoded as base64 in JSON" minLength:"1"`
+	BinaryLong []byte    `json:"binary_long" doc:"Longer binary payload encoded as base64 in JSON" minLength:"1"`
+	Date       time.Time `json:"date" doc:"Calendar date represented as an RFC 3339 timestamp"`
+	DateTime   time.Time `json:"date_time" doc:"Full timestamp with timezone"`
+	URL        string    `json:"url" format:"uri" doc:"Absolute URL example" example:"https://rest.sh/"`
 }
 
 type TypesModel struct {
-	Nullable *struct{} `json:"nullable"`
-	Boolean  bool      `json:"boolean"`
-	Integer  int64     `json:"integer"`
-	Number   float64   `json:"number"`
-	String   string    `json:"string"`
-	Tags     []string  `json:"tags"`
-	Object   SubObject `json:"object"`
+	Nullable *struct{} `json:"nullable" doc:"Nullable object field; this response intentionally returns null"`
+	Boolean  bool      `json:"boolean" doc:"Boolean example value" example:"true"`
+	Integer  int64     `json:"integer" minimum:"0" maximum:"100" doc:"Integer example with validation bounds" example:"42"`
+	Number   float64   `json:"number" minimum:"0" maximum:"1000" multipleOf:"0.01" doc:"Floating point example with precision constraints" example:"123.45"`
+	String   string    `json:"string" minLength:"1" maxLength:"120" doc:"Plain UTF-8 string example" example:"Hello, world!"`
+	Tags     []string  `json:"tags" minItems:"1" maxItems:"5" uniqueItems:"true" doc:"Short list of descriptive tags" example:"[\"example\",\"short\"]"`
+	Object   SubObject `json:"object" doc:"Nested object showing binary, date-time, and URI fields"`
 }
 
 type TypesResponse struct {
@@ -137,8 +137,8 @@ func (s *APIServer) RegisterCached(api huma.API) {
 		Description: "Cached response example",
 		Tags:        []string{"Caching"},
 	}, func(ctx context.Context, input *struct {
-		Seconds int  `path:"seconds" minimum:"1" maximum:"300" doc:"Number of seconds to cache"`
-		Private bool `query:"private" doc:"Disabled shared caches like CDNs"`
+		Seconds int  `path:"seconds" minimum:"1" maximum:"300" doc:"Number of seconds to cache" example:"60"`
+		Private bool `query:"private" doc:"Disable shared caches like CDNs" example:"false"`
 	}) (*CachedResponse, error) {
 		header := fmt.Sprintf("max-age=%d", input.Seconds)
 		if input.Private {
@@ -238,9 +238,9 @@ func (s *APIServer) RegisterStatus(api huma.API) {
 		DefaultStatus: http.StatusOK,
 		Responses:     statusFixtureResponses(),
 	}, func(ctx context.Context, input *struct {
-		Code       int    `path:"code" minimum:"100" maximum:"599" doc:"Status code to return"`
-		RetryAfter string `query:"retry-after" doc:"Retry-After header value"`
-		XRetryIn   string `query:"x-retry-in" doc:"X-Retry-In header value"`
+		Code       int    `path:"code" minimum:"100" maximum:"599" doc:"Status code to return" example:"418"`
+		RetryAfter string `query:"retry-after" doc:"Retry-After header value" example:"120"`
+		XRetryIn   string `query:"x-retry-in" doc:"X-Retry-In header value" example:"2m"`
 	}) (*StatusResponse, error) {
 		return &StatusResponse{
 			Status:     input.Code,
@@ -251,7 +251,7 @@ func (s *APIServer) RegisterStatus(api huma.API) {
 }
 
 type ListImagesResponse struct {
-	Link string `header:"Link"`
+	Link string `header:"Link" doc:"RFC 8288 pagination links"`
 	Body []ImageItem
 }
 
@@ -263,11 +263,11 @@ func (s *APIServer) RegisterListImages(api huma.API) {
 		Description: "List available images",
 		Tags:        []string{"Images"},
 	}, func(ctx context.Context, input *struct {
-		Cursor  string `query:"cursor" doc:"Pagination cursor"`
-		Format  string `query:"format" enum:"jpeg,webp,gif,png,heic" doc:"Filter by image format"`
-		Search  string `query:"search" doc:"Case-insensitive search over image names"`
-		Limit   int    `query:"limit" minimum:"1" maximum:"5" doc:"Maximum number of images to return"`
-		PerPage int    `query:"per_page" minimum:"1" maximum:"5" doc:"Alias for limit"`
+		Cursor  string `query:"cursor" doc:"Pagination cursor" example:"abc123"`
+		Format  string `query:"format" enum:"jpeg,webp,gif,png,heic" doc:"Filter by image format" example:"png"`
+		Search  string `query:"search" minLength:"1" maxLength:"100" doc:"Case-insensitive search over image names" example:"station"`
+		Limit   int    `query:"limit" minimum:"1" maximum:"5" doc:"Maximum number of images to return" example:"2"`
+		PerPage int    `query:"per_page" minimum:"1" maximum:"5" doc:"Alias for limit" example:"2"`
 	}) (*ListImagesResponse, error) {
 		// Return different pages based on the cursor.
 		resp := &ListImagesResponse{}
@@ -333,7 +333,7 @@ func filterImages(images []ImageItem, format, search string, limit, perPage int)
 }
 
 type GetImageResponse struct {
-	ContentType string `header:"Content-Type"`
+	ContentType string `header:"Content-Type" doc:"Image media type"`
 	Body        []byte
 }
 
@@ -345,7 +345,7 @@ func (s *APIServer) RegisterGetImage(api huma.API) {
 		Description: "Get an image",
 		Tags:        []string{"Images"},
 	}, func(ctx context.Context, i *struct {
-		Type string `path:"type" enum:"jpeg,webp,png,gif,heic"`
+		Type string `path:"type" enum:"jpeg,webp,png,gif,heic" doc:"Image format to return" example:"png"`
 	}) (*GetImageResponse, error) {
 		return imageResponse(i.Type), nil
 	})

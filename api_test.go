@@ -10,6 +10,7 @@ import (
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -166,6 +167,13 @@ func TestCoreContentAndInspectionEndpoints(t *testing.T) {
 	assertStatus(t, resp, http.StatusOK)
 	if !strings.Contains(resp.Body.String(), `"parsed":{"hello":"world"}`) {
 		t.Fatalf("echo response missing raw body: %s", resp.Body.String())
+	}
+
+	resp = api.Post("/body", map[string]any{"some": "data"})
+	assertStatus(t, resp, http.StatusOK)
+	body = decodeJSON(t, resp)
+	if !reflect.DeepEqual(body, map[string]any{"some": "data"}) {
+		t.Fatalf("body response mismatch: %#v", body)
 	}
 }
 
@@ -634,6 +642,16 @@ func TestOpenAPIAndHelperCoverage(t *testing.T) {
 	if paths["/redirect-to"].Get.Responses["307"] == nil || paths["/redirect-to"].Get.Responses["399"] == nil {
 		t.Fatal("OpenAPI should document redirect-to status range")
 	}
+	foundRedirectURLParam := false
+	for _, param := range paths["/redirect-to"].Get.Parameters {
+		if param.Name == "url" && param.In == "query" && param.Schema != nil && param.Schema.Format == "uri-reference" && param.Example == "/get" {
+			foundRedirectURLParam = true
+			break
+		}
+	}
+	if !foundRedirectURLParam {
+		t.Fatal("OpenAPI should document redirect-to URL as a URI reference")
+	}
 	if paths["/redirect/{n}"].Get.Responses["302"].Headers["Location"] == nil {
 		t.Fatal("OpenAPI should document redirect Location header")
 	}
@@ -700,6 +718,112 @@ func TestOpenAPIAndHelperCoverage(t *testing.T) {
 	second := sim.next().Region
 	if first == second {
 		t.Fatalf("metric simulator should rotate regions, got %q twice", first)
+	}
+}
+
+func TestOpenAPISchemaMetadata(t *testing.T) {
+	api := newTestAPI(t)
+	schemas := api.OpenAPI().Components.Schemas.Map()
+
+	typesModel := schemaFor(t, schemas, "TypesModel")
+	assertSchemaDescription(t, propertyFor(t, typesModel, "integer"), "Integer example with validation bounds")
+	assertFloatPtr(t, propertyFor(t, typesModel, "integer").Minimum, 0, "TypesModel.integer minimum")
+	assertFloatPtr(t, propertyFor(t, typesModel, "integer").Maximum, 100, "TypesModel.integer maximum")
+	assertFloatPtr(t, propertyFor(t, typesModel, "number").MultipleOf, 0.01, "TypesModel.number multipleOf")
+	assertIntPtr(t, propertyFor(t, typesModel, "string").MinLength, 1, "TypesModel.string minLength")
+	assertExample(t, propertyFor(t, typesModel, "string"), "Hello, world!")
+	assertIntPtr(t, propertyFor(t, typesModel, "tags").MinItems, 1, "TypesModel.tags minItems")
+	assertIntPtr(t, propertyFor(t, typesModel, "tags").MaxItems, 5, "TypesModel.tags maxItems")
+	if !propertyFor(t, typesModel, "tags").UniqueItems {
+		t.Fatal("TypesModel.tags should require unique items")
+	}
+
+	subObject := schemaFor(t, schemas, "SubObject")
+	assertSchemaDescription(t, propertyFor(t, subObject, "binary"), "Small binary payload encoded as base64 in JSON")
+	assertIntPtr(t, propertyFor(t, subObject, "binary").MinLength, 1, "SubObject.binary minLength")
+	assertExample(t, propertyFor(t, subObject, "url"), "https://rest.sh/")
+
+	book := schemaFor(t, schemas, "Book")
+	assertSchemaDescription(t, propertyFor(t, book, "title"), "Book title")
+	assertIntPtr(t, propertyFor(t, book, "title").MaxLength, 200, "Book.title maxLength")
+	assertFloatPtr(t, propertyFor(t, book, "rating_average").Maximum, 5, "Book.rating_average maximum")
+
+	item := schemaFor(t, schemas, "Item")
+	assertSchemaDescription(t, propertyFor(t, item, "id"), "Stable item identifier; omit or leave empty when creating an item to have one generated")
+	assertIntPtr(t, propertyFor(t, item, "id").MaxLength, 64, "Item.id maxLength")
+	if !propertyFor(t, item, "tags").UniqueItems {
+		t.Fatal("Item.tags should require unique items")
+	}
+
+	image := schemaFor(t, schemas, "ImageItem")
+	assertEnum(t, propertyFor(t, image, "format"), []any{"jpeg", "webp", "gif", "png", "heic"})
+	assertExample(t, propertyFor(t, image, "self"), "/image/jpeg")
+
+	auth := schemaFor(t, schemas, "AuthResponseBody")
+	assertEnum(t, propertyFor(t, auth, "scheme"), []any{"basic", "bearer", "api-key-header", "api-key-query"})
+
+	metrics := schemaFor(t, schemas, "MetricEvent")
+	assertEnum(t, propertyFor(t, metrics, "region"), []any{"us-east-1", "us-west-2", "eu-west-1", "ap-southeast-1"})
+	assertFloatPtr(t, propertyFor(t, metrics, "requests_per_second").Maximum, 2000, "MetricEvent.requests_per_second maximum")
+
+	alert := schemaFor(t, schemas, "AlertEvent")
+	assertExample(t, propertyFor(t, alert, "severity"), "critical")
+	assertExample(t, propertyFor(t, alert, "message"), "cpu_percent is critically high at 82.3% (threshold: 80%)")
+}
+
+func schemaFor(t *testing.T, schemas map[string]*huma.Schema, name string) *huma.Schema {
+	t.Helper()
+	schema := schemas[name]
+	if schema == nil {
+		t.Fatalf("missing schema %q", name)
+	}
+	return schema
+}
+
+func propertyFor(t *testing.T, schema *huma.Schema, name string) *huma.Schema {
+	t.Helper()
+	property := schema.Properties[name]
+	if property == nil {
+		t.Fatalf("missing property %q", name)
+	}
+	return property
+}
+
+func assertSchemaDescription(t *testing.T, schema *huma.Schema, want string) {
+	t.Helper()
+	if schema.Description != want {
+		t.Fatalf("description = %q, want %q", schema.Description, want)
+	}
+}
+
+func assertExample(t *testing.T, schema *huma.Schema, want any) {
+	t.Helper()
+	for _, example := range schema.Examples {
+		if reflect.DeepEqual(example, want) {
+			return
+		}
+	}
+	t.Fatalf("examples = %#v, want one matching %#v", schema.Examples, want)
+}
+
+func assertEnum(t *testing.T, schema *huma.Schema, want []any) {
+	t.Helper()
+	if !reflect.DeepEqual(schema.Enum, want) {
+		t.Fatalf("enum = %#v, want %#v", schema.Enum, want)
+	}
+}
+
+func assertFloatPtr(t *testing.T, got *float64, want float64, name string) {
+	t.Helper()
+	if got == nil || *got != want {
+		t.Fatalf("%s = %v, want %v", name, got, want)
+	}
+}
+
+func assertIntPtr(t *testing.T, got *int, want int, name string) {
+	t.Helper()
+	if got == nil || *got != want {
+		t.Fatalf("%s = %v, want %v", name, got, want)
 	}
 }
 

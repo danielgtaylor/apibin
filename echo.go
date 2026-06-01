@@ -29,11 +29,11 @@ func (r *RequestInfo) Resolve(ctx huma.Context) []error {
 }
 
 type EchoModel struct {
-	Method  string            `json:"method" doc:"HTTP method used"`
+	Method  string            `json:"method" enum:"GET,POST,PUT,PATCH,DELETE,HEAD,OPTIONS" doc:"HTTP method used" example:"GET"`
 	Headers map[string]string `json:"headers" doc:"HTTP headers"`
-	Host    string            `json:"host,omitempty" doc:"Hostname and optional port"`
-	URL     string            `json:"url" doc:"Full URL"`
-	Path    string            `json:"path" doc:"URL path"`
+	Host    string            `json:"host,omitempty" doc:"Hostname and optional port" example:"api.rest.sh"`
+	URL     string            `json:"url" format:"uri" doc:"Full URL" example:"https://api.rest.sh/get?show_env=1"`
+	Path    string            `json:"path" doc:"URL path" example:"/get"`
 	Query   map[string]string `json:"query,omitempty" doc:"URL query parameters"`
 	Body    interface{}       `json:"body,omitempty" doc:"Raw request body, either a UTF-8 string or bytes"`
 	Parsed  interface{}       `json:"parsed,omitempty" doc:"Parsed request body"`
@@ -64,6 +64,10 @@ type EchoResponse struct {
 	Vary         string    `header:"Vary"`
 
 	Body EchoModel
+}
+
+type BodyResponse struct {
+	Body any
 }
 
 func (s *APIServer) echoHandler(ctx context.Context, input *struct {
@@ -127,6 +131,21 @@ func (s *APIServer) echoHandler(ctx context.Context, input *struct {
 	resp.ETag = quoteETag(etag)
 
 	return resp, nil
+}
+
+func (s *APIServer) RegisterBody(api huma.API) {
+	huma.Register(api, huma.Operation{
+		OperationID: "post-body",
+		Method:      http.MethodPost,
+		Path:        "/body",
+		Summary:     "Return the parsed request body",
+		Description: "Echo the parsed request body as the complete response body.",
+		Tags:        []string{"Echo"},
+	}, func(ctx context.Context, input *struct {
+		Body any `doc:"Request body to parse and echo"`
+	}) (*BodyResponse, error) {
+		return &BodyResponse{Body: input.Body}, nil
+	})
 }
 
 func (s *APIServer) RegisterEcho(api huma.API) {
