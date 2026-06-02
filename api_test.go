@@ -644,7 +644,16 @@ func TestOpenAPIAndHelperCoverage(t *testing.T) {
 	}
 	foundRedirectURLParam := false
 	for _, param := range paths["/redirect-to"].Get.Parameters {
-		if param.Name == "url" && param.In == "query" && param.Schema != nil && param.Schema.Format == "uri-reference" && param.Example == "/get" {
+		hasExample := param.Example == "/get"
+		if param.Schema != nil {
+			for _, ex := range param.Schema.Examples {
+				if ex == "/get" {
+					hasExample = true
+					break
+				}
+			}
+		}
+		if param.Name == "url" && param.In == "query" && param.Schema != nil && param.Schema.Format == "uri-reference" && hasExample {
 			foundRedirectURLParam = true
 			break
 		}

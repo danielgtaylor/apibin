@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/binary"
+	"encoding/json"
+	"io"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -74,8 +76,6 @@ func (s *APIServer) echoHandler(ctx context.Context, input *struct {
 	RequestInfo
 	Status int `query:"status" default:"200" minimum:"100" maximum:"599" doc:"Status code to return"`
 	conditional.Params
-	Body    any
-	RawBody []byte
 }) (*EchoResponse, error) {
 	headers := map[string]string{}
 	input.ctx.EachHeader(func(name, value string) {
@@ -95,12 +95,24 @@ func (s *APIServer) echoHandler(ctx context.Context, input *struct {
 		scheme = proto
 	}
 
+	var bodyBytes []byte
+	if reader := input.ctx.BodyReader(); reader != nil {
+		bodyBytes, _ = io.ReadAll(reader)
+	}
+
 	var rawBody any
-	if len(input.RawBody) > 0 {
-		if utf8.Valid(input.RawBody) {
-			rawBody = string(input.RawBody)
+	var parsed any
+	if len(bodyBytes) > 0 {
+		if utf8.Valid(bodyBytes) {
+			rawBody = string(bodyBytes)
 		} else {
-			rawBody = input.RawBody
+			rawBody = bodyBytes
+		}
+
+		if strings.Contains(input.ctx.Header("Content-Type"), "cbor") {
+			_ = cbor.Unmarshal(bodyBytes, &parsed)
+		} else {
+			_ = json.Unmarshal(bodyBytes, &parsed)
 		}
 	}
 
@@ -113,7 +125,7 @@ func (s *APIServer) echoHandler(ctx context.Context, input *struct {
 		Path:    reqURL.Path,
 		Query:   query,
 		Body:    rawBody,
-		Parsed:  input.Body,
+		Parsed:  parsed,
 	}
 
 	lastModified, _ := time.Parse(time.RFC3339, "2022-02-01T12:34:56Z")
