@@ -4,8 +4,6 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/binary"
-	"encoding/json"
-	"io"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -76,6 +74,8 @@ func (s *APIServer) echoHandler(ctx context.Context, input *struct {
 	RequestInfo
 	Status int `query:"status" default:"200" minimum:"100" maximum:"599" doc:"Status code to return"`
 	conditional.Params
+	Body    any
+	RawBody []byte
 }) (*EchoResponse, error) {
 	headers := map[string]string{}
 	input.ctx.EachHeader(func(name, value string) {
@@ -95,24 +95,12 @@ func (s *APIServer) echoHandler(ctx context.Context, input *struct {
 		scheme = proto
 	}
 
-	var bodyBytes []byte
-	if reader := input.ctx.BodyReader(); reader != nil {
-		bodyBytes, _ = io.ReadAll(reader)
-	}
-
 	var rawBody any
-	var parsed any
-	if len(bodyBytes) > 0 {
-		if utf8.Valid(bodyBytes) {
-			rawBody = string(bodyBytes)
+	if len(input.RawBody) > 0 {
+		if utf8.Valid(input.RawBody) {
+			rawBody = string(input.RawBody)
 		} else {
-			rawBody = bodyBytes
-		}
-
-		if strings.Contains(input.ctx.Header("Content-Type"), "cbor") {
-			_ = cbor.Unmarshal(bodyBytes, &parsed)
-		} else {
-			_ = json.Unmarshal(bodyBytes, &parsed)
+			rawBody = input.RawBody
 		}
 	}
 
@@ -125,7 +113,7 @@ func (s *APIServer) echoHandler(ctx context.Context, input *struct {
 		Path:    reqURL.Path,
 		Query:   query,
 		Body:    rawBody,
-		Parsed:  parsed,
+		Parsed:  input.Body,
 	}
 
 	lastModified, _ := time.Parse(time.RFC3339, "2022-02-01T12:34:56Z")
@@ -174,5 +162,36 @@ func (s *APIServer) RegisterEcho(api huma.API) {
 			Path:        "/",
 			Tags:        []string{"Echo"},
 		}, s.echoHandler)
+		markRequestBodyOptional(api, method, "/")
+	}
+}
+
+func markRequestBodyOptional(api huma.API, method, path string) {
+	pathItem := api.OpenAPI().Paths[path]
+	if pathItem == nil {
+		return
+	}
+
+	var op *huma.Operation
+	switch method {
+	case http.MethodGet:
+		op = pathItem.Get
+	case http.MethodPost:
+		op = pathItem.Post
+	case http.MethodPut:
+		op = pathItem.Put
+	case http.MethodPatch:
+		op = pathItem.Patch
+	case http.MethodDelete:
+		op = pathItem.Delete
+	case http.MethodHead:
+		op = pathItem.Head
+	case http.MethodOptions:
+		op = pathItem.Options
+	}
+
+	if op != nil && op.RequestBody != nil {
+		op.RequestBody.Required = false
+		delete(op.RequestBody.Content, "application/octet-stream")
 	}
 }

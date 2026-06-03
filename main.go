@@ -123,6 +123,7 @@ func (s *APIServer) RegisterTypes(api huma.API) {
 		Description: "Example write for edits",
 		Tags:        []string{"Types"},
 	}, s.echoHandler)
+	markRequestBodyOptional(api, http.MethodPut, "/types")
 }
 
 type CachedResponse struct {

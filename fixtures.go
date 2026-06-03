@@ -574,6 +574,7 @@ func (s *APIServer) RegisterRequestFixtures(api huma.API) {
 			Tags:        []string{"Inspection"},
 			Parameters:  route.Parameters,
 		}, s.echoHandler)
+		markRequestBodyOptional(api, route.Method, route.Path)
 	}
 }
 
