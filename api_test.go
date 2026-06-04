@@ -227,6 +227,26 @@ func TestBooksAndItemsCRUD(t *testing.T) {
 		t.Fatalf("books list missing sapiens: %s", resp.Body.String())
 	}
 
+	resp = api.Patch("/books/the-fabric-of-the-cosmos", map[string]any{"title": "X", "author": "Y"})
+	assertStatus(t, resp, http.StatusNoContent)
+
+	resp = api.Put("/books/decimal-ratings", map[string]any{
+		"title":          "Decimal Ratings",
+		"author":         "Codex",
+		"rating_average": 4.7,
+		"recent_ratings": []map[string]any{
+			{"date": "2026-06-03T00:00:00Z", "rating": 4.6},
+			{"date": "2026-06-03T00:00:00Z", "rating": 4.8},
+		},
+	})
+	assertStatus(t, resp, http.StatusNoContent)
+
+	resp = api.Put("/books/invalid-decimal-rating", map[string]any{
+		"title":          "Invalid Decimal Rating",
+		"rating_average": 4.75,
+	})
+	assertStatus(t, resp, http.StatusUnprocessableEntity)
+
 	resp = api.Put("/books/test-book", Book{Title: "Test Book", Author: "Codex"})
 	assertStatus(t, resp, http.StatusNoContent)
 
@@ -644,7 +664,16 @@ func TestOpenAPIAndHelperCoverage(t *testing.T) {
 	}
 	foundRedirectURLParam := false
 	for _, param := range paths["/redirect-to"].Get.Parameters {
-		if param.Name == "url" && param.In == "query" && param.Schema != nil && param.Schema.Format == "uri-reference" && param.Example == "/get" {
+		hasExample := param.Example == "/get"
+		if param.Schema != nil {
+			for _, ex := range param.Schema.Examples {
+				if ex == "/get" {
+					hasExample = true
+					break
+				}
+			}
+		}
+		if param.Name == "url" && param.In == "query" && param.Schema != nil && param.Schema.Format == "uri-reference" && hasExample {
 			foundRedirectURLParam = true
 			break
 		}
@@ -665,6 +694,29 @@ func TestOpenAPIAndHelperCoverage(t *testing.T) {
 	}
 	if !foundAnythingPathParam {
 		t.Fatal("OpenAPI should document the /anything/{path} path parameter")
+	}
+	for _, tt := range []struct {
+		name string
+		op   *huma.Operation
+	}{
+		{"root POST", paths["/"].Post},
+		{"types PUT", paths["/types"].Put},
+		{"inspection POST", paths["/post"].Post},
+		{"anything GET", paths["/anything/{path}"].Get},
+		{"head HEAD", paths["/head"].Head},
+	} {
+		if tt.op == nil || tt.op.RequestBody == nil {
+			t.Fatalf("%s should document an optional request body", tt.name)
+		}
+		if tt.op.RequestBody.Required {
+			t.Fatalf("%s request body should be optional", tt.name)
+		}
+		if tt.op.RequestBody.Content["application/json"] == nil {
+			t.Fatalf("%s should document JSON request bodies", tt.name)
+		}
+		if tt.op.RequestBody.Content["application/octet-stream"] != nil {
+			t.Fatalf("%s should not expose RawBody's octet-stream helper schema", tt.name)
+		}
 	}
 
 	for _, tt := range []struct {

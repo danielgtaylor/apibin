@@ -162,5 +162,36 @@ func (s *APIServer) RegisterEcho(api huma.API) {
 			Path:        "/",
 			Tags:        []string{"Echo"},
 		}, s.echoHandler)
+		markRequestBodyOptional(api, method, "/")
+	}
+}
+
+func markRequestBodyOptional(api huma.API, method, path string) {
+	pathItem := api.OpenAPI().Paths[path]
+	if pathItem == nil {
+		return
+	}
+
+	var op *huma.Operation
+	switch method {
+	case http.MethodGet:
+		op = pathItem.Get
+	case http.MethodPost:
+		op = pathItem.Post
+	case http.MethodPut:
+		op = pathItem.Put
+	case http.MethodPatch:
+		op = pathItem.Patch
+	case http.MethodDelete:
+		op = pathItem.Delete
+	case http.MethodHead:
+		op = pathItem.Head
+	case http.MethodOptions:
+		op = pathItem.Options
+	}
+
+	if op != nil && op.RequestBody != nil {
+		op.RequestBody.Required = false
+		delete(op.RequestBody.Content, "application/octet-stream")
 	}
 }

@@ -12,6 +12,7 @@ import (
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/danielgtaylor/huma/v2/adapters/humachi"
 	"github.com/danielgtaylor/huma/v2/autopatch"
+	"github.com/danielgtaylor/huma/v2/humacli"
 	"github.com/danielgtaylor/huma/v2/negotiation"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
@@ -122,6 +123,7 @@ func (s *APIServer) RegisterTypes(api huma.API) {
 		Description: "Example write for edits",
 		Tags:        []string{"Types"},
 	}, s.echoHandler)
+	markRequestBodyOptional(api, http.MethodPut, "/types")
 }
 
 type CachedResponse struct {
@@ -359,7 +361,7 @@ type Options struct {
 func main() {
 	var api huma.API
 
-	cli := huma.NewCLI(func(hooks huma.Hooks, opts *Options) {
+	cli := humacli.New(func(hooks humacli.Hooks, opts *Options) {
 		router := chi.NewMux()
 
 		router.Use(middleware.Recoverer)
